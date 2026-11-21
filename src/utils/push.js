@@ -8,8 +8,9 @@ export const isPushSupported = () =>
   typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 
 function keyToBytes(base64) {
-  const pad = '='.repeat((4 - (base64.length % 4)) % 4)
-  const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'))
+  const str = String(base64 || '').trim().replace(/^["']|["']$/g, '')
+  const pad = '='.repeat((4 - (str.length % 4)) % 4)
+  const raw = atob((str + pad).replace(/-/g, '+').replace(/_/g, '/'))
   return Uint8Array.from(raw, (c) => c.charCodeAt(0))
 }
 
