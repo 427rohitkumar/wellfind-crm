@@ -1,95 +1,134 @@
-import { CalendarClock, Hash, IndianRupee, Info, RefreshCw } from 'lucide-react'
-import { Button, Card, CardBody, CardHeader } from '@/components/ui'
+import { useMemo, useState } from 'react'
+import { CalendarClock, CheckCircle2, Clock, Hash, IndianRupee, RefreshCw, Wallet } from 'lucide-react'
+import { Badge, Button, Card } from '@/components/ui'
+import { TableLoader } from '@/components/ui/Loaders'
 import { Notice, StatusBadge } from '@/pages/admin/adminUi'
-import { useLoad } from '@/pages/admin/useLoad'
-import { durationBetween, endedAt, formatDate, loadTeacherPortal } from './teacherPortalUtils'
+import { inputCls, useLoad } from '@/pages/admin/useLoad'
+import { Stat } from '@/pages/payouts/payoutShared'
+import { apiRequest } from '@/services/apiClient'
+import { getMyApplication, getMyProfile } from '@/services/teacherPortalService'
+import RegistrationRenewalCard from './RegistrationRenewalCard'
+import { formatDate } from './teacherPortalUtils'
 
 const money = (amount, currency = 'INR') =>
   amount == null ? '—' : new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(amount)
-
-function Row({ icon: Icon, label, children }) {
-  return (
-    <div className="flex items-start gap-3 text-sm">
-      <Icon size={16} className="mt-0.5 text-muted-foreground shrink-0" />
-      <div><div className="text-muted-foreground">{label}</div><div className="font-medium">{children}</div></div>
-    </div>
-  )
+const monthLabel = (m) => {
+  const [y, mo] = m.split('-').map(Number)
+  return new Date(y, mo - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
+}
+const getPayouts = async () => {
+  const res = await apiRequest('/api/teachers/me/payouts')
+  return res && typeof res === 'object' && 'data' in res ? res.data : res
 }
 
+/** Fees & History: the registration fee, and what Wellfind has paid (or still owes) per student, per month. */
 export default function TeacherFees() {
-  const { data, loading, error, reload } = useLoad(loadTeacherPortal, [])
-  const fee = data?.profile?.registrationFee
-  const allocations = data?.allocations || []
+  const profile = useLoad(getMyProfile, [])
+  const appState = useLoad(getMyApplication, [])
+  const payouts = useLoad(getPayouts, [])
+  const [msg, setMsg] = useState({ error: '', success: '' })
+  const [year, setYear] = useState('all')
+  const [state, setState] = useState('all')
+
+  const fee = profile.data?.registrationFee
+  const rows = payouts.data?.rows || []
+  const totals = payouts.data?.totals
+  const years = useMemo(() => [...new Set(rows.map((r) => r.month.slice(0, 4)))].sort().reverse(), [rows])
+  const shown = rows.filter((r) => (year === 'all' || r.month.startsWith(year)) && (state === 'all' || r.status === state))
+  const refreshAll = () => { profile.reload(); appState.reload(); payouts.reload() }
+
+  const feeCard = (
+    <Card>
+            <div className="wf-cardhead"><h3><IndianRupee size={18} />Registration fee</h3>{fee && <StatusBadge status={fee.status} />}</div>
+            {!fee ? <div className="wf-testpad"><p className="wf-muted" style={{ margin: 0 }}>{profile.loading ? 'Loading…' : 'No registration fee record found.'}</p></div> : (
+              <dl className="wf-info">
+                <div><dt>Amount</dt><dd>{money(fee.amount, fee.currency)}</dd></div>
+                <div><dt>Validity</dt><dd><CalendarClock size={14} />Academic year {fee.year || '—'}</dd></div>
+                <div><dt>Paid on</dt><dd>{fee.paymentDate && fee.paymentDate !== 'Pending' ? formatDate(fee.paymentDate) : fee.paymentDate || '—'}</dd></div>
+                <div><dt>Reference</dt><dd><Hash size={14} />{fee.transactionRef && fee.transactionRef !== 'None' ? fee.transactionRef : '—'}</dd></div>
+              </dl>
+            )}
+            {fee?.status === 'pending' && <div className="wf-testpad" style={{ paddingTop: 0 }}><div className="wf-lock">Your registration fee is pending. Pay it from Application Status.</div></div>}
+          </Card>
+  )
 
   return (
     <div className="page__section">
       <header className="page__header">
         <div className="page__headline">
           <h1 className="page__title">Fees &amp; History</h1>
-          <p className="page__description">Your registration fee and the history of students allocated to you.</p>
+          <p className="page__description">Your yearly registration fee, and the payments you received from Wellfind for each student, month by month.</p>
         </div>
-        <div className="page__action"><Button variant="outline" onClick={reload}><RefreshCw size={16} className="mr-2" />Refresh</Button></div>
+        <div className="page__action"><Button variant="outline" onClick={refreshAll}><RefreshCw size={16} style={{ marginRight: 8 }} />Refresh</Button></div>
       </header>
 
-      <Notice error={error} />
+      <Notice error={profile.error || payouts.error || msg.error} success={msg.success} onClose={() => setMsg({ error: '', success: '' })} />
 
-      <Card className="mb-6">
-        <CardHeader className="border-b border-border py-3.5 px-5 flex items-center justify-between">
-          <h3 className="card__title">Registration fee</h3>
-          {fee && <StatusBadge status={fee.status} />}
-        </CardHeader>
-        <CardBody className="p-5">
-          {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : !fee ? (
-            <p className="text-sm text-muted-foreground">No registration fee record found.</p>
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-              <Row icon={IndianRupee} label="Amount">{money(fee.amount, fee.currency)}</Row>
-              <Row icon={CalendarClock} label="Validity / duration">Academic year {fee.year || '—'}</Row>
-              <Row icon={CalendarClock} label="Payment date">{fee.paymentDate && fee.paymentDate !== 'Pending' ? formatDate(fee.paymentDate) : fee.paymentDate || '—'}</Row>
-              <Row icon={Hash} label="Transaction reference">{fee.transactionRef && fee.transactionRef !== 'None' ? fee.transactionRef : '—'}</Row>
-            </div>
-          )}
-          {fee?.status === 'pending' && (
-            <p className="mt-4 text-sm text-warning">Your registration fee is pending. Please contact Wellfind admin to complete the payment.</p>
-          )}
-        </CardBody>
-      </Card>
+      {appState.data ? (
+        <div className="wf-portal-grid">
+          <div className="wf-portal-main">
+            <RegistrationRenewalCard app={appState.data} onDone={refreshAll} onSuccess={(text) => setMsg({ error: '', success: text })} onError={(text) => setMsg({ error: text, success: '' })} />
+          </div>
+          <div className="wf-portal-side">
+          <Card>
+            <div className="wf-cardhead"><h3><IndianRupee size={18} />Registration fee</h3>{fee && <StatusBadge status={fee.status} />}</div>
+            {!fee ? <div className="wf-testpad"><p className="wf-muted" style={{ margin: 0 }}>{profile.loading ? 'Loading…' : 'No registration fee record found.'}</p></div> : (
+              <dl className="wf-info">
+                <div><dt>Amount</dt><dd>{money(fee.amount, fee.currency)}</dd></div>
+                <div><dt>Validity</dt><dd><CalendarClock size={14} />Academic year {fee.year || '—'}</dd></div>
+                <div><dt>Paid on</dt><dd>{fee.paymentDate && fee.paymentDate !== 'Pending' ? formatDate(fee.paymentDate) : fee.paymentDate || '—'}</dd></div>
+                <div><dt>Reference</dt><dd><Hash size={14} />{fee.transactionRef && fee.transactionRef !== 'None' ? fee.transactionRef : '—'}</dd></div>
+              </dl>
+            )}
+            {fee?.status === 'pending' && <div className="wf-testpad" style={{ paddingTop: 0 }}><div className="wf-lock">Your registration fee is pending. Pay it from Application Status.</div></div>}
+          </Card>
+          </div>
+        </div>
+      ) : (
+        feeCard
+      )}
+
+      <div className="wf-stat-grid">
+        <Stat icon={CheckCircle2} label="Total received" value={totals ? money(totals.received) : '…'} note={totals ? `${totals.paidCount} payment${totals.paidCount === 1 ? '' : 's'}` : ''} tone="success" />
+        <Stat icon={Clock} label="Yet to receive" value={totals ? money(totals.pending) : '…'} note={totals ? `${totals.pendingCount} month${totals.pendingCount === 1 ? '' : 's'} pending` : ''} tone="warning" />
+        <Stat icon={Wallet} label="Students paid for" value={payouts.loading ? '…' : new Set(rows.map((r) => r.studentName)).size} note="Across all months" tone="info" />
+      </div>
 
       <Card>
-        <CardHeader className="border-b border-border py-3.5 px-5"><h3 className="card__title">Student allocation history</h3></CardHeader>
-        <CardBody className="p-0">
-          <div className="flex items-start gap-2 px-5 py-3 text-xs text-muted-foreground border-b border-border">
-            <Info size={14} className="mt-0.5 shrink-0" />
-            Per-student tuition fee payments are not recorded in the system yet; this shows each allocation with its duration and outcome.
+        <div className="wf-sectionhead" style={{ flexWrap: 'wrap' }}>
+          <div><h3>Payment history</h3><p>What you were paid for each student, each month</p></div>
+          <div className="wf-filterbar">
+            <select className={inputCls} style={{ width: 130 }} value={year} onChange={(e) => setYear(e.target.value)} aria-label="Year">
+              <option value="all">All years</option>
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select className={inputCls} style={{ width: 150 }} value={state} onChange={(e) => setState(e.target.value)} aria-label="Status">
+              <option value="all">Paid &amp; pending</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+            </select>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b border-border">
-                  <th className="px-5 py-3">Student</th><th className="px-5 py-3">Subject</th>
-                  <th className="px-5 py-3">Started</th><th className="px-5 py-3">Ended</th>
-                  <th className="px-5 py-3">Duration</th><th className="px-5 py-3">Status</th>
+        </div>
+        <div className="wf-table-wrap">
+          <table className="wf-table">
+            <thead><tr><th>Month</th><th>Student</th><th>Subject</th><th className="num">Amount</th><th>Status</th><th>Paid on</th><th>Reference</th></tr></thead>
+            <tbody>
+              {payouts.loading && <tr><td colSpan={7} style={{ padding: 0 }}><TableLoader columns={7} /></td></tr>}
+              {!payouts.loading && !payouts.error && shown.length === 0 && <tr><td colSpan={7} className="wf-state">{rows.length === 0 ? 'No payments yet. A row appears for every month you teach a student.' : 'Nothing matches these filters.'}</td></tr>}
+              {!payouts.loading && shown.map((r) => (
+                <tr key={`${r.allocationId}-${r.month}`}>
+                  <td className="wf-cell-title">{monthLabel(r.month)}</td>
+                  <td>{r.studentName}<div className="wf-cell-sub">{r.studentClass}</div></td>
+                  <td>{r.subject}</td>
+                  <td className="num"><b>{money(r.status === 'paid' ? r.amount : r.due)}</b></td>
+                  <td>{r.status === 'paid' ? <Badge size="sm" variant="success">Paid</Badge> : <Badge size="sm" variant="warning">Pending</Badge>}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{r.paidAt ? formatDate(r.paidAt) : '—'}</td>
+                  <td>{r.reference || '—'}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {!loading && allocations.length === 0 && <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No allocation history yet.</td></tr>}
-                {allocations.map((a) => {
-                  const end = endedAt(a)
-                  return (
-                    <tr key={a.id} className="border-b border-border last:border-0">
-                      <td className="px-5 py-3 font-medium">{a.student?.name}</td>
-                      <td className="px-5 py-3">{a.subject}</td>
-                      <td className="px-5 py-3">{formatDate(a.allocatedAt)}</td>
-                      <td className="px-5 py-3">{end ? formatDate(end) : '—'}</td>
-                      <td className="px-5 py-3">{durationBetween(a.allocatedAt, end || new Date())}</td>
-                      <td className="px-5 py-3"><StatusBadge status={a.status} /></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </CardBody>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
   )

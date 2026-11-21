@@ -1,3 +1,6 @@
+import { Alert } from '@/components/ui/Alert'
+import { usePermissions } from '@/hooks/usePermissions'
+import { TableLoader } from '@/components/ui/Loaders'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -26,8 +29,11 @@ import {
   deleteTeacher
 } from '@/services/teacherService'
 import { TeacherStatusBadge } from './TeacherStatusBadge'
+import { PersonAvatar } from '@/components/ui/PersonAvatar'
 import { TeacherDetailModal } from './TeacherDetailModal'
 import { TeacherEditModal } from './TeacherEditModal'
+import { Printer } from 'lucide-react'
+import { TEACHER_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
 
 function getFeeDisplay(fee) {
   const status = fee?.status || 'pending'
@@ -76,6 +82,8 @@ function getFeeDisplay(fee) {
 }
 
 export default function Teachers() {
+  const { can } = usePermissions()
+  const canWrite = (m) => can(m, 'write')
   const navigate = useNavigate()
   const [teachers, setTeachers] = useState(initialTeachersData)
   const [loading, setLoading] = useState(true)
@@ -363,66 +371,40 @@ export default function Teachers() {
     showToast(`Updated status for ${selectedIds.length} teachers.`)
   }
 
-  // CSV Export
+  // Table export / print: what is on screen (search, filters and sorting applied)
   const handleExportCSV = () => {
     if (sortedTeachers.length === 0) {
-      setActiveBanner({
-        type: 'warning',
-        title: 'Export Skipped:',
-        message: 'No teacher records available to export.',
-      })
-      alert('No teacher records available to export.')
+      setActiveBanner({ type: 'warning', title: 'Export Skipped:', message: 'No teacher records available to export.' })
       return
     }
-
-    const headers = [
-      'ID',
-      'Name',
-      'Email',
-      'Mobile',
-      'Primary Subject',
-      'Qualification',
-      'Experience (Years)',
-      'Registration Fee Status',
-      'Registration Fee Amount',
-      'KYC Status',
-      'Allocation Status',
-      'Allocated Students',
-      'Account Status',
-    ]
-
-    const rows = sortedTeachers.map((t) => [
-      t.id,
-      `"${(t.name || '').replace(/"/g, '""')}"`,
-      `"${(t.email || '').replace(/"/g, '""')}"`,
-      `"${(t.mobile || '').replace(/"/g, '""')}"`,
-      `"${(t.primarySubject || '').replace(/"/g, '""')}"`,
-      `"${(t.qualification || '').replace(/"/g, '""')}"`,
-      t.experienceYears || 0,
-      t.registrationFee?.status || '',
-      t.registrationFee?.amount || 0,
-      t.kyc?.status || '',
-      t.studentAllocation?.status || '',
-      `"${(t.studentAllocation?.studentsSummary || '').replace(/"/g, '""')}"`,
-      t.account?.status || '',
-    ])
-
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `wellfind-teachers-${new Date().toISOString().slice(0, 10)}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-    setActiveBanner({
-      type: 'success',
-      title: 'Export Complete:',
-      message: `Exported ${sortedTeachers.length} teacher records to CSV file.`,
-    })
+    downloadCSV(`wellfind-teachers-${today()}.csv`, TEACHER_COLUMNS, sortedTeachers)
+    setActiveBanner({ type: 'success', title: 'Export Complete:', message: `Exported ${sortedTeachers.length} teacher records to CSV file.` })
     showToast(`Exported ${sortedTeachers.length} teacher records to CSV.`)
+  }
+
+  const handlePrint = () => {
+    if (sortedTeachers.length === 0) {
+      setActiveBanner({ type: 'warning', title: 'Print Skipped:', message: 'No teacher records to print.' })
+      return
+    }
+    if (!printRows('Teachers', TEACHER_COLUMNS, sortedTeachers)) {
+      setActiveBanner({ type: 'warning', title: 'Print blocked:', message: 'Allow pop-ups for this site to print.' })
+    }
+  }
+
+  // Top button: every approved teacher, ignoring search and filters
+  const [exportingAll, setExportingAll] = useState(false)
+  const handleExportAll = async () => {
+    setExportingAll(true)
+    try {
+      const all = await fetchAllPages((page) => fetchTeachers({ page, limit: 100 }))
+      downloadCSV(`wellfind-all-teachers-${today()}.csv`, TEACHER_COLUMNS, all)
+      showToast(`Exported all ${all.length} teachers.`)
+    } catch (err) {
+      showToast(err.message || 'Could not export all teachers.', 'error')
+    } finally {
+      setExportingAll(false)
+    }
   }
 
   const getInitials = (name) => {
@@ -440,21 +422,7 @@ export default function Teachers() {
     <div className="page__section">
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg bg-surface border border-border text-foreground transition-all">
-          {toastMessage.type === 'warning' ? (
-            <AlertCircle className="w-4 h-4 text-warning shrink-0" />
-          ) : (
-            <CheckCircle className="w-4 h-4 text-success shrink-0" />
-          )}
-          <span className="text-sm font-medium">{toastMessage.text}</span>
-          <button
-            type="button"
-            className="ml-2 text-muted-foreground hover:text-foreground"
-            onClick={() => setToastMessage(null)}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <div className="wf-toast"><Alert variant={toastMessage.type === 'error' ? 'error' : toastMessage.type === 'warning' ? 'warning' : 'success'} title={toastMessage.text} onClose={() => setToastMessage(null)} /></div>
       )}
 
       {/* Page Header matching Meridian layout */}
@@ -478,14 +446,16 @@ export default function Teachers() {
             />
             Refresh
           </Button>
-          <Button variant="neutral" onClick={handleExportCSV}>
+          <Button variant="neutral" onClick={handleExportAll} disabled={exportingAll} title="Download every teacher as CSV, ignoring filters">
             <Download className="w-4 h-4 mr-1.5" aria-hidden="true" />
-            Export
+            {exportingAll ? 'Exporting…' : 'Export all'}
           </Button>
+          {canWrite('teachers') && (
           <Button variant="primary" onClick={handleAddTeacher}>
             <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
             Add teacher
           </Button>
+          )}
         </div>
       </header>
 
@@ -647,9 +617,13 @@ export default function Teachers() {
               </p>
             </div>
             <div className="ms-auto flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Button variant="outline" size="sm" onClick={handleExportCSV} title="Download the teachers shown in this table">
                 <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
                 Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrint} title="Print the teachers shown in this table">
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Print
               </Button>
             </div>
           </CardHeader>
@@ -712,6 +686,7 @@ export default function Teachers() {
                   <col style={{ width: '48px' }} />   {/* Checkbox */}
                   <col style={{ width: '220px' }} />  {/* Teacher Profile */}
                   <col style={{ width: '140px' }} />  {/* Mobile Number */}
+                  <col style={{ width: '90px' }} />   {/* Gender */}
                   <col style={{ width: '140px' }} />  {/* Primary Subject */}
                   <col style={{ width: '160px' }} />  {/* Qualification */}
                   <col style={{ width: '75px' }} />   {/* Experience */}
@@ -744,6 +719,8 @@ export default function Teachers() {
                     <TableHeaderCell scope="col">
                       Mobile Number
                     </TableHeaderCell>
+
+                    <TableHeaderCell scope="col">Gender</TableHeaderCell>
 
                     {/* 3. Primary Subject */}
                     <TableHeaderCell
@@ -825,19 +802,12 @@ export default function Teachers() {
                 <TableBody>
                   {loading && (
                     <TableRow>
-                      <TableCell colSpan={11} className="text-center py-12">
-                        <div className="flex flex-col items-center justify-center gap-3">
-                          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                          <span className="text-sm text-muted-foreground font-medium">
-                            Loading approved teacher profiles...
-                          </span>
-                        </div>
-                      </TableCell>
+                      <TableCell colSpan={12} style={{ padding: 0 }}><TableLoader columns={8} /></TableCell>
                     </TableRow>
                   )}
                   {!loading && paginatedTeachers.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={11} className="table-empty-state-cell">
+                      <TableCell colSpan={12} className="table-empty-state-cell">
                         <div className="table-empty-state">
                           <GraduationCap className="table-empty-state__icon" aria-hidden="true" />
                           <h3 className="table-empty-state__title">No approved teachers found</h3>
@@ -874,35 +844,7 @@ export default function Teachers() {
                       {/* 1. Teacher column */}
                       <TableCell>
                         <div className="flex items-center gap-2 min-w-0 teacher-profile">
-                          <div
-                            className="relative shrink-0 rounded-full overflow-hidden bg-neutral ring-1 ring-border avatar"
-                            style={{
-                              width: '36px',
-                              height: '36px',
-                              minWidth: '36px',
-                              minHeight: '36px',
-                            }}
-                          >
-                            {teacher.avatar ? (
-                              <img
-                                src={teacher.avatar}
-                                alt={teacher.name}
-                                className="w-full h-full object-cover block avatar__image"
-                                style={{
-                                  width: '100%',
-                                  height: '100%',
-                                  objectFit: 'cover',
-                                }}
-                              />
-                            ) : (
-                              <div
-                                className="w-full h-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs"
-                                style={{ width: '100%', height: '100%' }}
-                              >
-                                {getInitials(teacher.name)}
-                              </div>
-                            )}
-                          </div>
+                          <PersonAvatar src={teacher.avatar} name={teacher.name} gender={teacher.gender} role="teacher" size={38} />
                           <div className="min-w-0 flex-1 teacher-info">
                             <Link
                               to={`/admin/teachers/${teacher.id}`}
@@ -932,6 +874,10 @@ export default function Teachers() {
                           <Phone size={16} className="text-muted-foreground shrink-0" aria-hidden="true" />
                           <span>{teacher.mobile}</span>
                         </a>
+                      </TableCell>
+
+                      <TableCell className="whitespace-nowrap">
+                        {{ male: 'Male', female: 'Female', other: 'Other' }[teacher.gender] || <span className="text-muted-foreground text-xs">—</span>}
                       </TableCell>
 
                       {/* 3. Primary Subject */}
@@ -1026,6 +972,7 @@ export default function Teachers() {
                           >
                             <Eye className="w-4 h-4" aria-hidden="true" />
                           </Link>
+                          {canWrite('teachers') && (
                           <button
                             type="button"
                             className="button button--ghost button--danger button--icon-only button--sm"
@@ -1035,6 +982,7 @@ export default function Teachers() {
                           >
                             <Trash2 className="w-4 h-4" aria-hidden="true" />
                           </button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

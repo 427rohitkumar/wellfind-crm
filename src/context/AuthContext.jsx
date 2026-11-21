@@ -3,6 +3,7 @@ import { AuthContext } from './authContextDef';
 import {
   getAuthToken,
   getAuthUser,
+  apiRequest,
   setAuthSession,
   clearAuthSession,
   loginAdmin,
@@ -27,6 +28,21 @@ export function AuthProvider({ children }) {
       window.removeEventListener('auth:unauthorized', handleUnauthorized);
     };
   }, []);
+
+  // Sessions created before roles existed have no permission map: fetch it once.
+  useEffect(() => {
+    if (!token || !user || user.permissions || user.role === 'teacher') return;
+    let alive = true;
+    apiRequest('/api/auth/me')
+      .then((res) => {
+        if (!alive || !res?.user) return;
+        const next = { ...user, ...res.user };
+        setUser(next);
+        setAuthSession(token, next);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [token, user]);
 
   const login = useCallback(async (email, password) => {
     setIsLoading(true);

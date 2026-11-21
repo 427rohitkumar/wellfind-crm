@@ -26,15 +26,14 @@ export async function fetchStudents({
     const whereConditions = []
 
     // If specific status requested
-    if (status) {
-      if (status === 'active' || status === 'enrolled') {
-        whereConditions.push({ enquiryStatus: { equals: 'converted' } })
-      } else {
-        whereConditions.push({ enquiryStatus: { equals: status } })
-      }
-    } else {
-      // By default show converted enquiries (converted to active students)
+    // A student enquiry becomes a student once it leaves the Inquiries tab: after verification and the
+    // optional test it is sent to allocation (converted) and later allocated to a teacher.
+    if (status === 'awaiting_allocation') {
       whereConditions.push({ enquiryStatus: { equals: 'converted' } })
+    } else if (status === 'allocated') {
+      whereConditions.push({ enquiryStatus: { equals: 'allocated' } })
+    } else {
+      whereConditions.push({ enquiryStatus: { in: ['converted', 'allocated'] } })
     }
 
     if (studentClass) {
@@ -63,7 +62,9 @@ export async function fetchStudents({
       const mappedDocs = response.docs.map((doc, idx) => ({
         id: doc.id || `STD-${idx + 101}`,
         name: doc.name || 'Unnamed Student',
-        parentName: doc.parentName || doc.name || '',
+        parentName: doc.parentName || '',
+        gender: doc.studentGender || null,
+        preferredTeacherGender: doc.preferredTeacherGender || null,
         email: doc.email || `${(doc.name || 'student').toLowerCase().replace(/[^a-z0-9]/g, '.')}@example.com`,
         phone: doc.phoneNumber || '',
         studentClass: doc.studentClass || 'Standard',
@@ -74,7 +75,7 @@ export async function fetchStudents({
         preferredTiming: doc.preferredTiming || 'Flexible',
         budgetRange: doc.budgetRange || 'Standard',
         allocationStatus: doc.allocationStatus || doc.studentAllocation?.status || null,
-        status: doc.enquiryStatus === 'converted' ? 'active' : (doc.enquiryStatus || 'active'),
+        status: doc.enquiryStatus === 'converted' ? 'awaiting_allocation' : (doc.enquiryStatus || 'awaiting_allocation'),
         submittedDate: doc.createdAt || new Date().toISOString(),
         assignedTeacher: doc.assignedTo?.name || (typeof doc.assignedTo === 'string' ? doc.assignedTo : 'Unassigned'),
         adminNotes: doc.adminNotes || '',

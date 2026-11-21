@@ -4,6 +4,16 @@
  */
 
 export const STUDENT_STATUS_CONFIG = {
+  awaiting_allocation: {
+    label: 'Awaiting Allocation',
+    variant: 'warning',
+    description: 'Verified (test done or skipped). Waiting for a teacher to be allocated',
+  },
+  allocated: {
+    label: 'Allocated',
+    variant: 'success',
+    description: 'A teacher has been allocated',
+  },
   active: {
     label: 'Active',
     variant: 'success',

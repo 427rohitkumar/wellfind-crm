@@ -6,10 +6,41 @@ import { apiRequest } from './apiClient';
 export const STUDENT_ENQUIRY_STATUSES = [
   { value: 'new', label: 'New', variant: 'info' },
   { value: 'contacted', label: 'Contacted', variant: 'warning' },
-  { value: 'in_progress', label: 'In Progress', variant: 'primary' },
+  { value: 'in_progress', label: 'In Progress (Verified)', variant: 'primary' },
+  { value: 'test', label: 'Test', variant: 'warning' },
+  { value: 'converted', label: 'Ready for Allocation', variant: 'primary' },
   { value: 'allocated', label: 'Allocated', variant: 'success' },
   { value: 'closed', label: 'Closed', variant: 'neutral' },
 ];
+
+export const STUDENT_TEST_MODES = [
+  { value: 'physical', label: 'Physical (in person)' },
+  { value: 'virtual', label: 'Virtual (online)' },
+];
+
+/**
+ * Statuses an admin can move TO from a given status (mirrors backend
+ * VALID_STUDENT_STATUS_TRANSITIONS). `converted` is performed through the
+ * convert endpoint because it creates the Student record.
+ */
+export const STUDENT_ENQUIRY_TRANSITIONS = {
+  new: ['contacted', 'closed'],
+  contacted: ['in_progress', 'closed'],
+  in_progress: ['test', 'converted', 'closed'],
+  test: ['in_progress', 'converted', 'closed'],
+  converted: ['closed'],
+  allocated: [],
+  closed: ['contacted', 'in_progress'],
+};
+
+export const getStudentStatusLabel = (value) =>
+  STUDENT_ENQUIRY_STATUSES.find((s) => s.value === value)?.label || value || 'New';
+
+/** Statuses reachable from `current` (plus `current` itself), as option objects. */
+export function getStudentStatusOptions(current = 'new') {
+  const reachable = new Set([current, ...(STUDENT_ENQUIRY_TRANSITIONS[current] || [])]);
+  return STUDENT_ENQUIRY_STATUSES.filter((s) => reachable.has(s.value));
+}
 
 /**
  * List student enquiries with pagination, sorting, status filter, and search.
@@ -29,6 +60,10 @@ export async function fetchStudentEnquiries({
   if (status) {
     params.set('enquiryStatus', status);
   }
+
+  // Enquiries that finished the inquiry stage (sent to allocation / allocated) now live in the
+  // Students tab. They only show here when that status is picked explicitly in the filter.
+  const hideMoved = !status ? [{ enquiryStatus: { not_in: ['converted', 'allocated'] } }] : [];
 
   // Construct Payload `where` query for backend search
   if (search.trim()) {
@@ -50,10 +85,12 @@ export async function fetchStudentEnquiries({
       };
     } else {
       whereObj = {
-        or: searchConditions,
+        and: [...hideMoved, { or: searchConditions }],
       };
     }
     params.set('where', JSON.stringify(whereObj));
+  } else if (hideMoved.length > 0) {
+    params.set('where', JSON.stringify({ and: hideMoved }));
   }
 
   return apiRequest(`/api/student-enquiries?${params.toString()}`);
@@ -86,6 +123,8 @@ export async function createStudentEnquiry(data) {
   const payload = {
     name: (data.parentName || data.name || '').trim(),
     parentName: (data.parentName || data.name || '').trim(),
+    studentGender: data.studentGender || undefined,
+    preferredTeacherGender: data.preferredTeacherGender || 'any',
     phoneNumber: (data.phoneNumber || '').trim(),
     studentClass: (data.studentClass || '').trim(),
     subjects: Array.isArray(data.subjects) ? data.subjects : [data.subjects],

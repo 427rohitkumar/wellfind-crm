@@ -1,3 +1,4 @@
+import { Alert } from '@/components/ui/Alert'
 import { clsx } from 'clsx'
 import { useState, useEffect, useCallback } from 'react'
 import {
@@ -7,17 +8,15 @@ import {
   TablePagination,
   useTableSelection
 } from '@/components/ui'
-import {
-  Search, RefreshCw, AlertCircle, CheckCircle,
-  GraduationCap, BookOpen, Key, LogIn, Download, X, Lock, Plus
-} from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Search, RefreshCw, AlertCircle, GraduationCap, BookOpen, Key, LogIn, Download, X, Lock, Plus } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
 import { StudentInquiriesTab } from './StudentInquiriesTab'
 import { TeacherInquiriesTab } from './TeacherInquiriesTab'
 import { InquiryDetailModal } from './InquiryDetailModal'
 import { InquiryEditModal } from './InquiryEditModal'
 import { InquiryDeleteModal } from './InquiryDeleteModal'
 import { StudentEnquiryAddModal } from './StudentEnquiryAddModal'
+import { StudentStatusModal } from './StudentStatusModal'
 import {
   fetchStudentEnquiries,
   updateStudentEnquiry,
@@ -33,9 +32,14 @@ import {
   isAuthenticated
 } from '@/services/apiClient'
 import { useEnquiryCounts } from '@/context/EnquiryCountContext'
+import { STUDENT_ENQUIRY_COLUMNS, TEACHER_ENQUIRY_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
+import { usePermissions } from '@/hooks/usePermissions'
 
 export default function Inquiries() {
-  const [activeTab, setActiveTab] = useState('student') // 'student' | 'teacher'
+  const { can } = usePermissions()
+  const [activeTab, setActiveTab] = useState(() => (can('student_inquiries') ? 'student' : 'teacher')) // 'student' | 'teacher'
+  const navigate = useNavigate()
+  const [statusAction, setStatusAction] = useState(null) // { enquiry, target } for student status moves
 
   // Student Inquiries State
   const [studentInquiries, setStudentInquiries] = useState([])
@@ -262,6 +266,13 @@ export default function Inquiries() {
     const isStudent = activeTab === 'student'
     const enquiryId = enquiry.id
 
+    // Student status moves always go through the status modal, which collects call
+    // notes, test details or a close reason and uses the right backend endpoint.
+    if (isStudent) {
+      setStatusAction({ enquiry, target: newStatus })
+      return
+    }
+
     setUpdatingStatusId(enquiryId)
     try {
       if (isStudent) {
@@ -297,6 +308,30 @@ export default function Inquiries() {
     } finally {
       setUpdatingStatusId(null)
     }
+  }
+
+  const handleStatusActionDone = (result) => {
+    setStatusAction(null)
+    if (result.kind === 'test') {
+      refreshCounts()
+      navigate(result.testId ? `/admin/tests/${result.testId}` : '/admin/tests')
+      return
+    }
+    if (result.kind === 'converted') {
+      showToast('Student moved to the Students tab. Allocate a teacher from there.')
+      // The enquiry has left the inquiry stage: drop it from this list.
+      if (!studentStatusFilter) {
+        setStudentInquiries((prev) => prev.filter((item) => item.id !== result.enquiryId))
+        setStudentTotalDocs((prev) => Math.max(0, prev - 1))
+      }
+    } else if (result.doc?.id) {
+      showToast(`Enquiry #${result.doc.id} updated.`)
+      setStudentInquiries((prev) =>
+        prev.map((item) => (item.id === result.doc.id ? { ...item, ...result.doc } : item))
+      )
+    }
+    refreshCounts()
+    setRefreshTrigger((prev) => prev + 1)
   }
 
   // Quick Edit success handler: update row data only after server confirmation
@@ -366,41 +401,79 @@ export default function Inquiries() {
     refreshCounts()
   }
 
-  // CSV Export for current tab
-  const handleExportCSV = () => {
-    const isStudent = activeTab === 'student'
-    const docs = isStudent ? studentInquiries : teacherInquiries
-    if (docs.length === 0) {
-      alert('No data available to export.')
-      return
+  // Table export / print: the current tab with the current search and status filter, every page of it
+  const [exporting, setExporting] = useState('')
+  const loadAllOfTab = async () => {
+    if (activeTab === 'student') {
+      return fetchAllPages((page) => fetchStudentEnquiries({ page, limit: 100, sort: studentSortConfig.direction === 'desc' ? `-${studentSortConfig.key}` : studentSortConfig.key, status: studentStatusFilter, search: studentSearchQuery }))
     }
+    return fetchAllPages((page) => fetchTeacherEnquiries({ page, limit: 100, sort: teacherSortConfig.direction === 'desc' ? `-${teacherSortConfig.key}` : teacherSortConfig.key, status: teacherStatusFilter, search: teacherSearchQuery }))
+  }
+  const tabInfo = () => (activeTab === 'student'
+    ? { columns: STUDENT_ENQUIRY_COLUMNS, file: 'student-enquiries', title: 'Student enquiries' }
+    : { columns: TEACHER_ENQUIRY_COLUMNS, file: 'teacher-applications', title: 'Teacher applications' })
 
-    let csvContent = 'data:text/csv;charset=utf-8,'
-    if (isStudent) {
-      csvContent += 'ID,Name,Phone,Class,Subjects,Locality,Timing,Budget,Status,Submitted At\n'
-      docs.forEach((row) => {
-        const subjectsStr = Array.isArray(row.subjects)
-          ? row.subjects.map((s) => (typeof s === 'string' ? s : s?.subject)).join('; ')
-          : ''
-        csvContent += `"${row.id}","${row.name || ''}","${row.phoneNumber || ''}","${row.studentClass || ''}","${subjectsStr}","${row.locality || ''}","${row.preferredTiming || ''}","${row.budgetRange || ''}","${row.enquiryStatus || 'new'}","${row.createdAt || ''}"\n`
-      })
-    } else {
-      csvContent += 'ID,Full Name,Mobile,Email,Qualification,Experience,Primary Subject,Class Level,Locality,Status,Submitted At\n'
-      docs.forEach((row) => {
-        csvContent += `"${row.id}","${row.fullName || ''}","${row.mobileNumber || ''}","${row.email || ''}","${row.highestQualification || ''}","${row.teachingExperience || ''}","${row.primarySubject || ''}","${row.classLevel || ''}","${row.teachingLocality || ''}","${row.applicationStatus || 'new'}","${row.createdAt || ''}"\n`
-      })
+  const handleExportCSV = async () => {
+    setExporting('table')
+    try {
+      const docs = await loadAllOfTab()
+      if (docs.length === 0) { showToast('Nothing to export for this filter.', 'warning'); return }
+      const { columns, file } = tabInfo()
+      downloadCSV(`wellfind-${file}-${today()}.csv`, columns, docs)
+      showToast(`Exported ${docs.length} ${activeTab === 'student' ? 'student enquiries' : 'teacher applications'}.`)
+    } catch (err) {
+      showToast(err.message || 'Export failed.', 'error')
+    } finally {
+      setExporting('')
     }
+  }
 
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute(
-      'download',
-      `${isStudent ? 'student_enquiries' : 'teacher_applications'}_${new Date().toISOString().split('T')[0]}.csv`
-    )
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+  const handleExportSelected = () => {
+    const sel = activeTab === 'student' ? studentSelection : teacherSelection
+    const docs = (activeTab === 'student' ? studentInquiries : teacherInquiries).filter((d) => sel.isSelected(d.id))
+    if (docs.length === 0) return
+    const { columns, file } = tabInfo()
+    downloadCSV(`wellfind-${file}-selected-${today()}.csv`, columns, docs)
+    showToast(`Exported ${docs.length} selected.`)
+  }
+
+  const handlePrintTable = async () => {
+    setExporting('print')
+    try {
+      const docs = await loadAllOfTab()
+      if (docs.length === 0) { showToast('Nothing to print for this filter.', 'warning'); return }
+      const { columns, title } = tabInfo()
+      if (!printRows(title, columns, docs)) showToast('Allow pop-ups for this site to print.', 'warning')
+    } catch (err) {
+      showToast(err.message || 'Print failed.', 'error')
+    } finally {
+      setExporting('')
+    }
+  }
+
+  // Top button: everything, ignoring filters
+  const [exportMenu, setExportMenu] = useState(false)
+  const handleExportGlobal = async (which) => {
+    setExportMenu(false)
+    setExporting('global')
+    try {
+      let count = 0
+      if (which !== 'teachers') {
+        const all = await fetchAllPages((page) => fetchStudentEnquiries({ page, limit: 100 }))
+        downloadCSV(`wellfind-all-student-enquiries-${today()}.csv`, STUDENT_ENQUIRY_COLUMNS, all)
+        count += all.length
+      }
+      if (which !== 'students') {
+        const all = await fetchAllPages((page) => fetchTeacherEnquiries({ page, limit: 100 }))
+        downloadCSV(`wellfind-all-teacher-applications-${today()}.csv`, TEACHER_ENQUIRY_COLUMNS, all)
+        count += all.length
+      }
+      showToast(`Exported ${count} records.`)
+    } catch (err) {
+      showToast(err.message || 'Export failed.', 'error')
+    } finally {
+      setExporting('')
+    }
   }
 
   const handleSaveManualToken = (e) => {
@@ -431,17 +504,7 @@ export default function Inquiries() {
     <div className="page__section">
       {/* Toast Banner */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg bg-surface border border-border text-foreground">
-          <CheckCircle className="w-4 h-4 text-success shrink-0" />
-          <span className="text-sm font-medium">{toastMessage.text}</span>
-          <button
-            type="button"
-            className="ml-2 text-muted-foreground hover:text-foreground"
-            onClick={() => setToastMessage(null)}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        <div className="wf-toast"><Alert variant={toastMessage.type === 'error' ? 'error' : toastMessage.type === 'warning' ? 'warning' : 'success'} title={toastMessage.text} onClose={() => setToastMessage(null)} /></div>
       )}
 
       {/* Page Header matching Meridian Orders layout */}
@@ -454,15 +517,26 @@ export default function Inquiries() {
         </div>
 
         <div className="page__action">
-          <Button
-            variant="neutral"
-            onClick={handleExportCSV}
-            title="Export current table to CSV"
-            disabled={isAuthRequired || currentLoading}
-          >
-            <Download className="w-4 h-4 mr-1.5" />
-            Export
-          </Button>
+          <div style={{ position: 'relative' }}>
+            <Button
+              variant="neutral"
+              onClick={() => setExportMenu((v) => !v)}
+              title="Export all enquiries, ignoring filters"
+              disabled={isAuthRequired || exporting === 'global'}
+              aria-haspopup="menu"
+              aria-expanded={exportMenu}
+            >
+              <Download className="w-4 h-4 mr-1.5" />
+              {exporting === 'global' ? 'Exporting…' : 'Export'}
+            </Button>
+            {exportMenu && (
+              <div className="wf-menu" role="menu" onMouseLeave={() => setExportMenu(false)}>
+                <button type="button" role="menuitem" onClick={() => handleExportGlobal('students')}>All student enquiries<small>CSV, every enquiry</small></button>
+                <button type="button" role="menuitem" onClick={() => handleExportGlobal('teachers')}>All teacher applications<small>CSV, every application</small></button>
+                <button type="button" role="menuitem" onClick={() => handleExportGlobal('both')}>Everything<small>2 CSV files</small></button>
+              </div>
+            )}
+          </div>
 
           <Button
             variant="neutral"
@@ -497,6 +571,7 @@ export default function Inquiries() {
             role="tablist"
             aria-label="Inquiry Categories"
           >
+            {can('student_inquiries') && (
             <button
               type="button"
               className="toggle"
@@ -522,7 +597,9 @@ export default function Inquiries() {
                 </span>
               )}
             </button>
+            )}
 
+            {can('teacher_inquiries') && (
             <button
               type="button"
               className="toggle"
@@ -548,6 +625,7 @@ export default function Inquiries() {
                 </span>
               )}
             </button>
+            )}
           </div>
         </div>
 
@@ -665,7 +743,7 @@ export default function Inquiries() {
               </select>
 
               {/* Add Student Enquiry Button (Student Inquiries Tab only) */}
-              {activeTab === 'student' && (
+              {activeTab === 'student' && can('student_inquiries', 'write') && (
                 <Button
                   variant="primary"
                   onClick={() => setAddStudentModalOpen(true)}
@@ -729,20 +807,20 @@ export default function Inquiries() {
                 variant="neutral"
                 size="sm"
                 onClick={handleExportCSV}
-                title="Export current table to CSV"
-                disabled={isAuthRequired || currentLoading}
+                title="Download this table (current search and filter, all pages) as CSV"
+                disabled={isAuthRequired || currentLoading || exporting === 'table'}
               >
                 <Download className="w-3.5 h-3.5 mr-1.5" />
-                Export
+                {exporting === 'table' ? 'Exporting…' : 'Export'}
               </Button>
               <Button
                 variant="neutral"
                 size="sm"
-                onClick={() => window.print()}
-                title="Print table"
-                disabled={isAuthRequired}
+                onClick={handlePrintTable}
+                title="Print this table (current search and filter, all pages)"
+                disabled={isAuthRequired || currentLoading || exporting === 'print'}
               >
-                Print
+                {exporting === 'print' ? 'Preparing…' : 'Print'}
               </Button>
             </div>
           </CardHeader>
@@ -771,7 +849,7 @@ export default function Inquiries() {
                 >
                   Clear Selection
                 </Button>
-                <Button variant="primary" size="sm" onClick={handleExportCSV}>
+                <Button variant="primary" size="sm" onClick={handleExportSelected}>
                   Export Selected
                 </Button>
               </div>
@@ -922,6 +1000,16 @@ export default function Inquiries() {
           )}
         </Card>
       </div>
+
+      {statusAction && (
+        <StudentStatusModal
+          key={`${statusAction.enquiry.id}-${statusAction.target}`}
+          enquiry={statusAction.enquiry}
+          targetStatus={statusAction.target}
+          onClose={() => setStatusAction(null)}
+          onDone={handleStatusActionDone}
+        />
+      )}
 
       {/* View Detail Modal */}
       <InquiryDetailModal

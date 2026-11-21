@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, Check, X, AlertTriangle, Save, Image, Tag, Package, DollarSign, Hash, ToggleRight, ArrowLeft } from 'lucide-react'
+import { ChevronDown, Check, AlertTriangle, Save, Image, Tag, Package, DollarSign, Hash, ToggleRight, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Input, Textarea, Select, Label, Field, Checkbox, InputGroup, InputGroupText } from '@/components/ui/Input'

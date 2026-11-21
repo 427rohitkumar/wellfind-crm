@@ -1,15 +1,22 @@
 import { Link } from 'react-router-dom'
-import { Briefcase, GraduationCap, KeyRound, LogOut, Mail, MapPin, Phone } from 'lucide-react'
-import { Badge, Button, Card, CardBody, CardHeader } from '@/components/ui'
+import { Briefcase, GraduationCap, KeyRound, LogOut, Mail, MapPin, Phone, ShieldCheck, UserRound } from 'lucide-react'
+import { Badge, Button, Card } from '@/components/ui'
+import { PageLoader } from '@/components/ui/Loaders'
 import { useAuth } from '@/hooks/useAuth'
 import { Notice, StatusBadge } from '@/pages/admin/adminUi'
 import { useLoad } from '@/pages/admin/useLoad'
 import { getMyProfile } from '@/services/teacherPortalService'
+import { getProfile } from '@/services/profileService'
+import { ProfileDetailsForm } from '@/components/uploads/ProfileDetailsForm'
+import { AvatarUploader } from '@/components/uploads/AvatarUploader'
+import { MyDocuments } from '@/components/uploads/MyDocuments'
 import { formatDate } from './teacherPortalUtils'
 
+/** Teacher "My Profile": photo, basic details (editable), verified details (read-only) and personal documents. */
 export default function TeacherProfile() {
   const { user, logout } = useAuth()
-  const { data: p, loading, error } = useLoad(getMyProfile, [])
+  const { data: p, loading, error, reload } = useLoad(getMyProfile, [])
+  const editable = useLoad(getProfile, [])
 
   const fields = p && [
     [Mail, 'Email', p.email || user?.email],
@@ -22,52 +29,62 @@ export default function TeacherProfile() {
     [Briefcase, 'Availability', p.availability],
   ]
 
+  if (loading && !p) return <PageLoader label="Loading your profile…" />
+
   return (
     <div className="page__section">
       <header className="page__header">
         <div className="page__headline">
           <h1 className="page__title">My Profile</h1>
-          <p className="page__description">Your teacher account and profile as registered with Wellfind Academic.</p>
+          <p className="page__description">Your photo, details and documents as registered with Wellfind Academic.</p>
         </div>
         <div className="page__action">
-          <Button variant="outline" onClick={() => logout()}><LogOut size={16} className="mr-2" />Log out</Button>
+          <Button variant="outline" onClick={() => logout()}><LogOut size={16} style={{ marginRight: 8 }} />Log out</Button>
         </div>
       </header>
 
       <Notice error={error} />
-      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
       {p && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader className="border-b border-border py-3.5 px-5 flex items-center justify-between">
-              <h3 className="card__title">{p.name}</h3>
-              <div className="flex gap-2">
-                <StatusBadge status={p.approvalStatus} />
-                <Badge size="sm" variant={p.availabilityStatus === 'free' ? 'success' : 'warning'}>{p.availabilityStatus}</Badge>
-              </div>
-            </CardHeader>
-            <CardBody className="p-5 grid gap-4 sm:grid-cols-2 text-sm">
-              {fields.map(([Icon, label, value]) => (
-                <div key={label} className="flex items-start gap-3">
-                  <Icon size={16} className="mt-0.5 text-muted-foreground shrink-0" />
-                  <div><div className="text-muted-foreground">{label}</div><div className="font-medium">{value || '—'}</div></div>
-                </div>
-              ))}
-            </CardBody>
-          </Card>
+        <div className="wf-portal-grid">
+          {/* Main column: what the teacher edits */}
+          <div className="wf-portal-main">
+            <ProfileDetailsForm profile={editable.data} onSaved={() => { reload(); editable.reload() }} />
+            <MyDocuments />
+          </div>
 
-          <div className="space-y-6">
+          {/* Side column: photo, verified info, account */}
+          <div className="wf-portal-side">
             <Card>
-              <CardHeader className="border-b border-border py-3.5 px-5"><h3 className="card__title">Account</h3></CardHeader>
-              <CardBody className="p-5 text-sm space-y-3">
-                <div><span className="text-muted-foreground">Login email</span><div className="font-medium break-all">{user?.email}</div></div>
-                <div><span className="text-muted-foreground">Member since</span><div className="font-medium">{formatDate(p.approvedAt || p.createdAt)}</div></div>
-                <div><span className="text-muted-foreground">KYC</span><div><StatusBadge status={p.kycStatus} /></div></div>
-                <Link to="/forgot-password" className="button button--outline button--sm w-full">
-                  <KeyRound size={14} className="mr-2" />Change password via OTP
-                </Link>
-              </CardBody>
+              <div className="wf-cardhead"><h3><UserRound size={18} />Profile photo</h3></div>
+              <div className="wf-testpad"><AvatarUploader name={p.name} gender={p.gender} role="teacher" avatar={p.avatar} /></div>
+            </Card>
+
+            <Card>
+              <div className="wf-cardhead">
+                <h3><ShieldCheck size={18} />{p.name}</h3>
+                <div className="wf-actions">
+                  <StatusBadge status={p.approvalStatus} />
+                  <Badge size="sm" variant={p.availabilityStatus === 'free' ? 'success' : 'warning'}>{p.availabilityStatus}</Badge>
+                </div>
+              </div>
+              <dl className="wf-info">
+                {fields.map(([Icon, label, value]) => (
+                  <div key={label}><dt>{label}</dt><dd><Icon size={14} />{value || <span className="is-empty">—</span>}</dd></div>
+                ))}
+              </dl>
+            </Card>
+
+            <Card>
+              <div className="wf-cardhead"><h3>Account</h3></div>
+              <dl className="wf-info">
+                <div><dt>Login email</dt><dd>{user?.email}</dd></div>
+                <div><dt>Member since</dt><dd>{formatDate(p.approvedAt || p.createdAt)}</dd></div>
+                <div><dt>KYC</dt><dd><StatusBadge status={p.kycStatus} /></dd></div>
+              </dl>
+              <div className="wf-testpad" style={{ paddingTop: 0 }}>
+                <Link to="/forgot-password" className="button button--outline button--sm"><KeyRound size={14} style={{ marginRight: 6 }} />Change password via OTP</Link>
+              </div>
             </Card>
           </div>
         </div>

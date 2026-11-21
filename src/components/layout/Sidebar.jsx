@@ -1,17 +1,35 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAppShell } from '../../context/AppShellContext';
 import { useEnquiryCounts } from '../../context/EnquiryCountContext';
 import { useAuth } from '@/hooks/useAuth';
-import { BarChart3, ClipboardList, GitBranch, IndianRupee, LayoutDashboard, MessageSquare, ShieldCheck, UserRound, Users } from 'lucide-react';
+import { usePermissions } from '@/hooks/usePermissions';
+import { getMyApplication } from '@/services/teacherPortalService';
+import { BarChart3, History, ClipboardCheck, ClipboardList, Mail, GitBranch, IndianRupee, LayoutDashboard, MessageSquare, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { clsx } from 'clsx';
 
 function TeacherMenu() {
+  const [approved, setApproved] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    getMyApplication()
+      .then((app) => { if (alive) setApproved(Boolean(app?.approved)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const items = [
     { to: '/teacher', label: 'Dashboard', icon: LayoutDashboard, end: true },
-    { to: '/teacher/students', label: 'My Students', icon: Users },
-    { to: '/teacher/fees', label: 'Fees & History', icon: IndianRupee },
-    { to: '/teacher/profile', label: 'Profile', icon: UserRound },
+    { to: '/teacher/application', label: 'Application Status', icon: ClipboardList },
+    // Available once the application is approved.
+    ...(approved
+      ? [
+          { to: '/teacher/students', label: 'My Students', icon: Users },
+          { to: '/teacher/history', label: 'Allocation History', icon: History },
+          { to: '/teacher/fees', label: 'Fees & History', icon: IndianRupee },
+          { to: '/teacher/profile', label: 'Profile', icon: UserRound },
+        ]
+      : []),
   ];
   return (
     <nav className="sidebar__menu" aria-label="Teacher menu">
@@ -40,9 +58,10 @@ export function Sidebar() {
   const location = useLocation();
 
   const isTeacher = user?.role === 'teacher';
+  const { can } = usePermissions();
   const dashboardPath = isTeacher ? '/teacher' : '/admin';
 
-  const [reportsOpen, setReportsOpen] = useState(() => location.pathname.startsWith('/reports'));
+  const [reportsOpen, setReportsOpen] = useState(() => location.pathname.startsWith('/admin/payouts/reports'));
   const isCollapsed = isSidebarCollapsed && !isMobile;
 
   const handleLogout = async (e) => {
@@ -77,32 +96,6 @@ export function Sidebar() {
           <span>Wellfind Academic</span>
         </NavLink>
       </header>
-
-      <div className="sidebar__search">
-        <div className="input-group input-group--search">
-          <span className="input-group__text" aria-hidden="true">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="1em"
-              height="1em"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <g fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="11.5" cy="11.5" r="9.5" />
-                <path strokeLinecap="round" d="M18.5 18.5L22 22" />
-              </g>
-            </svg>
-          </span>
-          <input
-            type="search"
-            className="input"
-            placeholder="Search inquiries, students, teachers…"
-            aria-label="Search"
-            disabled={isCollapsed}
-          />
-        </div>
-      </div>
 
       <div className="sidebar__content">
         {isTeacher ? <TeacherMenu /> : (
@@ -140,9 +133,10 @@ export function Sidebar() {
                 </NavLink>
               </li>
 
+              {(can('student_inquiries') || can('teacher_inquiries')) && (
               <li className="sidebar__item" role="none">
                 <NavLink
-                  to="/inquiries"
+                  to="/admin/inquiries"
                   className="sidebar__button"
                   role="menuitem"
                   title="Inquiries"
@@ -168,17 +162,20 @@ export function Sidebar() {
                   </span>
                 ) : null}
               </li>
+              )}
 
             </ul>
           </div>
 
           {/* Group 2: Operations */}
+          {(can('students') || can('teachers') || can('tests') || can('allocation') || can('mail') || can('users')) && (
           <div className="sidebar__group">
             <span className="sidebar__group-title">Operations</span>
             <ul className="sidebar__list" role="menubar">
+              {can('students') && (
               <li className="sidebar__item" role="none">
                 <NavLink
-                  to="/students"
+                  to="/admin/students"
                   className="sidebar__button"
                   role="menuitem"
                   title="Students"
@@ -187,10 +184,12 @@ export function Sidebar() {
                   <span>Students</span>
                 </NavLink>
               </li>
+              )}
 
+              {can('teachers') && (
               <li className="sidebar__item" role="none">
                 <NavLink
-                  to="/teachers"
+                  to="/admin/teachers"
                   className="sidebar__button"
                   role="menuitem"
                   title="Teachers"
@@ -210,7 +209,18 @@ export function Sidebar() {
                   <span>Teachers</span>
                 </NavLink>
               </li>
+              )}
 
+              {can('tests') && (
+              <li className="sidebar__item" role="none">
+                <NavLink to="/admin/tests" className="sidebar__button" role="menuitem" title="Tests">
+                  <ClipboardCheck className="sidebar__icon" />
+                  <span>Tests</span>
+                </NavLink>
+              </li>
+              )}
+
+              {can('allocation') && (
               <li className="sidebar__item" role="none">
                 <NavLink
                   to="/admin/allocation"
@@ -222,24 +232,31 @@ export function Sidebar() {
                   <span>Allocation</span>
                 </NavLink>
               </li>
+              )}
 
+              {can('mail') && (
               <li className="sidebar__item" role="none">
-                <NavLink to="/admin/student-records" className="sidebar__button" role="menuitem" title="Student Records">
-                  <ClipboardList className="sidebar__icon" />
-                  <span>Student Records</span>
+                <NavLink to="/admin/mail" className="sidebar__button" role="menuitem" title="Mail">
+                  <Mail className="sidebar__icon" />
+                  <span>Mail</span>
                 </NavLink>
               </li>
+              )}
 
+              {can('users') && (
               <li className="sidebar__item" role="none">
                 <NavLink to="/admin/users" className="sidebar__button" role="menuitem" title="Users">
                   <ShieldCheck className="sidebar__icon" />
                   <span>Users</span>
                 </NavLink>
               </li>
+              )}
             </ul>
           </div>
+          )}
 
           {/* Group 3: Insights */}
+          {can('payments') && (
           <div className="sidebar__group">
             <span className="sidebar__group-title">Insights</span>
             <ul className="sidebar__list" role="menubar">
@@ -249,7 +266,7 @@ export function Sidebar() {
                 role="none"
               >
                 <NavLink
-                  to="/reports"
+                  to="/admin/payouts/reports"
                   className="sidebar__button"
                   role="menuitem"
                   title="Payout"
@@ -299,18 +316,18 @@ export function Sidebar() {
                 <div className="sidebar__submenu" id="nav-reports">
                   <ul className="sidebar__list">
                     <li className="sidebar__item">
-                      <NavLink to="/admin/student-payments" className="sidebar__button">
+                      <NavLink to="/admin/payouts/student-payments" className="sidebar__button">
                         <span>Student Payments</span>
                       </NavLink>
                     </li>
                     <li className="sidebar__item">
-                      <NavLink to="/admin/teacher-payments" className="sidebar__button">
+                      <NavLink to="/admin/payouts/teacher-payments" className="sidebar__button">
                         <span>Teacher Payments</span>
                       </NavLink>
                     </li>
                     <li className="sidebar__item">
-                      <NavLink to="/reports" className="sidebar__button">
-                        <span>Billing</span>
+                      <NavLink to="/admin/payouts/reports" className="sidebar__button">
+                        <span>Billing &amp; Reports</span>
                       </NavLink>
                     </li>
                   </ul>
@@ -318,7 +335,9 @@ export function Sidebar() {
               </li>
             </ul>
           </div>
+          )}
 
+          {can('analytics') && (
           <div className="sidebar__group">
             <span className="sidebar__group-title">Analytics</span>
             <ul className="sidebar__list" role="menubar">
@@ -335,6 +354,7 @@ export function Sidebar() {
               </li>
             </ul>
           </div>
+          )}
 
         </nav>
         )}
@@ -342,35 +362,6 @@ export function Sidebar() {
 
       <footer className="sidebar__footer">
         <ul className="sidebar__list" role="menubar">
-          <li className="sidebar__item" role="none">
-            <NavLink
-              to={isTeacher ? '/teacher/settings' : '/settings'}
-              className="sidebar__button"
-              role="menuitem"
-              title="Settings"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="1em"
-                height="1em"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  fill="currentColor"
-                  fillRule="evenodd"
-                  d="M14.279 2.152C13.909 2 13.439 2 12.5 2s-1.408 0-1.779.152a2 2 0 0 0-1.09 1.083c-.094.223-.13.484-.145.863a1.62 1.62 0 0 1-.796 1.353a1.64 1.64 0 0 1-1.579.008c-.338-.178-.583-.276-.825-.308a2.03 2.03 0 0 0-1.49.396c-.318.242-.553.646-1.022 1.453c-.47.807-.704 1.21-.757 1.605c-.07.526.074 1.058.4 1.479c.148.192.357.353.68.555c.477.297.783.803.783 1.361s-.306 1.064-.782 1.36c-.324.203-.533.364-.682.556a2 2 0 0 0-.399 1.479c.053.394.287.798.757 1.605s.704 1.21 1.022 1.453c.424.323.96.465 1.49.396c.242-.032.487-.13.825-.308a1.64 1.64 0 0 1 1.58.008c.486.28.774.795.795 1.353c.015.38.051.64.145.863c.204.49.596.88 1.09 1.083c.37.152.84.152 1.779.152s1.409 0 1.779-.152a2 2 0 0 0 1.09-1.083c.094-.223.13-.483.145-.863c.02-.558.309-1.074.796-1.353a1.64 1.64 0 0 1 1.579-.008c.338.178.583.276.825.308c.53.07 1.066-.073 1.49-.396c.318-.242.553-.646 1.022-1.453c.47-.807.704-1.21.757-1.605a2 2 0 0 0-.4-1.479c-.148-.192-.357-.353-.68-.555c-.477-.297-.783-.803-.783-1.361s.306-1.064.782-1.36c.324-.203.533-.364.682-.556a2 2 0 0 0 .399-1.479c-.053-.394-.287-.798-.757-1.605s-.704-1.21-1.022-1.453a2.03 2.03 0 0 0-1.49-.396c-.242.032-.487.13-.825.308a1.64 1.64 0 0 1-1.58-.008a1.62 1.62 0 0 1-.795-1.353c-.015-.38-.051-.64-.145-.863a2 2 0 0 0-1.09-1.083"
-                  clipRule="evenodd"
-                  opacity=".5"
-                />
-                <path
-                  fill="currentColor"
-                  d="M15.523 12c0 1.657-1.354 3-3.023 3s-3.023-1.343-3.023-3S10.83 9 12.5 9s3.023 1.343 3.023 3"
-                />
-              </svg>
-              <span>Settings</span>
-            </NavLink>
-          </li>
           <li className="sidebar__item" role="none">
             <button
               type="button"
@@ -411,23 +402,14 @@ export function Sidebar() {
             className="text-xs text-muted-foreground"
             style={{ '--link-color': 'var(--color-foreground)' }}
           >
-            Designed by{' '}
+            Powered by{' '}
             <a
-              href="https://nauv.al"
+              href="https://thebuilderstudio.in/"
               className="link"
               target="_blank"
               rel="noreferrer"
             >
-              Nauval
-            </a>{' '}
-            at{' '}
-            <a
-              href="https://enterprise.kredibel.com"
-              className="link"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Kredibel
+              Builder Studio
             </a>
           </p>
         </div>

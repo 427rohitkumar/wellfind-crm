@@ -12,6 +12,26 @@ export const TEACHER_APPLICATION_STATUSES = [
 ];
 
 /**
+ * Statuses an admin can move TO from a given status (mirrors backend
+ * VALID_TEACHER_STATUS_TRANSITIONS). Approval needs shortlisting and a completed
+ * evaluation first; `evaluation_completed` is set by the evaluation panel.
+ */
+export const TEACHER_STATUS_TRANSITIONS = {
+  new: ['under_review', 'rejected'],
+  under_review: ['shortlisted', 'rejected'],
+  shortlisted: ['approved', 'rejected'],
+  evaluation_completed: ['approved', 'rejected'],
+  rejected: ['under_review'],
+  approved: [],
+};
+
+/** Statuses reachable from `current` (plus `current` itself), as option objects. */
+export function getTeacherStatusOptions(current = 'new') {
+  const reachable = new Set([current, ...(TEACHER_STATUS_TRANSITIONS[current] || [])]);
+  return TEACHER_APPLICATION_STATUSES.filter((s) => reachable.has(s.value));
+}
+
+/**
  * Filter options for Teacher Inquiries queue.
  * Approved applications exit the inquiry queue to the main Teachers module.
  */

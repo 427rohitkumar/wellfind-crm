@@ -1,15 +1,16 @@
+import { Alert } from '@/components/ui/Alert'
+import { PageLoader, Spinner } from '@/components/ui/Loaders'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   Card, CardHeader, CardBody,
   Button, Badge
 } from '@/components/ui'
-import {
-  ArrowLeft, ChevronLeft, User, Users, Phone, Mail, MapPin, Clock, DollarSign,
-  GraduationCap, Briefcase, FileText, CheckCircle2, Shield, AlertCircle,
-  Calendar, Edit, Save, X, Loader2, Download, Check, ShieldCheck, Info
-} from 'lucide-react'
+import { ArrowLeft, ChevronLeft, User, Users, Phone, Mail, MapPin, Clock, DollarSign, GraduationCap, Briefcase, FileText, Shield, AlertCircle, Calendar, Edit, Save, X, Loader2, Download, Check, ShieldCheck, Info } from 'lucide-react'
 import { getTeacherById, updateTeacher, downloadTeacherDocument } from '@/services/teacherService'
+import { DocumentPreviewModal } from '@/components/uploads/DocumentPreview'
+import { resolveDocRef } from '@/components/uploads/docRef'
+import { MyDocuments } from '@/components/uploads/MyDocuments'
 import TeacherAdminControls from '@/pages/admin/TeacherAdminControls'
 import { TeacherStatusBadge } from './TeacherStatusBadge'
 import {
@@ -168,6 +169,9 @@ export default function TeacherDetail() {
     setIsEditing(false)
   }
 
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const previewKyc = (ref, name) => { const r = resolveDocRef(ref, name); setPreviewDoc({ url: r.url, name, mimeType: r.mimeType }) }
+
   const handleDownloadDoc = async (docRef, label) => {
     if (!docRef) return
     try {
@@ -200,10 +204,7 @@ export default function TeacherDetail() {
 
   if (loading) {
     return (
-      <div className="page__section py-16 flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <Loader2 className="animate-spin text-primary" size={32} />
-        <div className="text-sm font-medium text-muted-foreground">Loading teacher profile details...</div>
-      </div>
+      <PageLoader label="Loading teacher profile details" />
     )
   }
 
@@ -220,7 +221,7 @@ export default function TeacherDetail() {
               {error || `Teacher #${id} could not be retrieved from active records.`}
             </p>
             <div className="flex items-center gap-3 mt-2">
-              <Button variant="outline" onClick={() => navigate('/teachers')}>
+              <Button variant="outline" onClick={() => navigate('/admin/teachers')}>
                 <ArrowLeft size={16} /> Back to Teachers
               </Button>
               <Button variant="primary" onClick={loadTeacher}>
@@ -517,7 +518,7 @@ export default function TeacherDetail() {
         <div className="page__headline">
           <nav className="breadcrumb mb-2">
             <span className="breadcrumb__item">
-              <Link to="/teachers" className="hover:text-primary transition-colors flex items-center gap-1.5">
+              <Link to="/admin/teachers" className="hover:text-primary transition-colors flex items-center gap-1.5">
                 <ChevronLeft size={14} /> Teachers
               </Link>
             </span>
@@ -544,7 +545,7 @@ export default function TeacherDetail() {
         <div className="page__action flex items-center gap-2">
           {!isEditing ? (
             <>
-              <Button variant="outline" size="sm" onClick={() => navigate('/teachers')}>
+              <Button variant="outline" size="sm" onClick={() => navigate('/admin/teachers')}>
                 <ChevronLeft size={16} className="mr-1" /> Back to Teachers
               </Button>
               <Button variant="primary" size="sm" onClick={() => {
@@ -562,7 +563,7 @@ export default function TeacherDetail() {
               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
                 {saving ? (
                   <>
-                    <Loader2 size={16} className="animate-spin mr-1.5" /> Saving...
+                    <Spinner size={16} className="mr-1.5" /> Saving...
                   </>
                 ) : (
                   <>
@@ -577,27 +578,11 @@ export default function TeacherDetail() {
 
       {/* Success / Error Alerts */}
       {saveSuccess && (
-        <div className="p-3 mb-6 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            <span>{saveSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setSaveSuccess('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="success" title={saveSuccess} onClose={() => setSaveSuccess('')} />
       )}
 
       {saveError && (
-        <div className="p-3 mb-6 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={16} />
-            <span>{saveError}</span>
-          </div>
-          <button type="button" onClick={() => setSaveError('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="error" title={saveError} onClose={() => setSaveError('')} />
       )}
 
       {/* Main Grid: 2/3 Content + 1/3 Sidebar Layout */}
@@ -868,6 +853,8 @@ export default function TeacherDetail() {
                   </div>
                 </div>
                 {teacher.kyc?.aadhaarDocument ? (
+                  <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => previewKyc(teacher.kyc.aadhaarDocument, 'Identity / Aadhaar Card')}>Preview</Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -875,12 +862,13 @@ export default function TeacherDetail() {
                     onClick={() => handleDownloadDoc(teacher.kyc.aadhaarDocument, 'aadhaar_card')}
                   >
                     {downloadingDoc === 'aadhaar' ? (
-                      <Loader2 size={14} className="animate-spin mr-1.5" />
+                      <Spinner size={14} className="mr-1.5" />
                     ) : (
                       <Download size={14} className="mr-1.5" />
                     )}
                     <span>Download File</span>
                   </Button>
+                  </div>
                 ) : (
                   <Badge variant="neutral" size="sm">
                     {teacher.kyc?.status === 'verified' ? 'Verified ID' : 'Not Uploaded'}
@@ -900,6 +888,8 @@ export default function TeacherDetail() {
                   </div>
                 </div>
                 {teacher.kyc?.qualificationDocument ? (
+                  <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => previewKyc(teacher.kyc.qualificationDocument, 'Qualification Certificate')}>Preview</Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -907,12 +897,13 @@ export default function TeacherDetail() {
                     onClick={() => handleDownloadDoc(teacher.kyc.qualificationDocument, 'qualification_certificate')}
                   >
                     {downloadingDoc === 'qualification' ? (
-                      <Loader2 size={14} className="animate-spin mr-1.5" />
+                      <Spinner size={14} className="mr-1.5" />
                     ) : (
                       <Download size={14} className="mr-1.5" />
                     )}
                     <span>Download File</span>
                   </Button>
+                  </div>
                 ) : (
                   <Badge variant="neutral" size="sm">
                     {teacher.kyc?.status === 'verified' ? 'Verified Degree' : 'Not Uploaded'}
@@ -1075,7 +1066,7 @@ export default function TeacherDetail() {
                   >
                     {saving ? (
                       <>
-                        <Loader2 size={16} className="animate-spin mr-1.5" /> Saving Changes...
+                        <Spinner size={16} className="mr-1.5" /> Saving Changes...
                       </>
                     ) : (
                       <>
@@ -1127,6 +1118,8 @@ export default function TeacherDetail() {
       {renderTeachingHistoryTab()}
     </TabsContent>
   </Tabs>
+  {teacher.userId && <div style={{ marginTop: 20 }}><MyDocuments ownerId={teacher.userId} /></div>}
+  {previewDoc && <DocumentPreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
 </div>
   )
 }

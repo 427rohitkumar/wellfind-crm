@@ -12,7 +12,7 @@ import { inputCls, useLoad } from './useLoad'
  * Props: enquiryId, applicationStatus, onChanged() — called after approve / evaluation change
  * so the parent can reload the enquiry.
  */
-export default function TeacherEvaluationPanel({ enquiryId, applicationStatus, onChanged }) {
+export default function TeacherEvaluationPanel({ enquiryId, applicationStatus, feeResolved = true, onChanged }) {
   const [modal, setModal] = useState(null) // {type:'form', evaluation?}
   const [msg, setMsg] = useState({ error: '', success: '' })
   const [approving, setApproving] = useState(false)
@@ -43,7 +43,7 @@ export default function TeacherEvaluationPanel({ enquiryId, applicationStatus, o
         <h3 className="card__title">Evaluation &amp; approval</h3>
         <div className="flex gap-2">
           {!locked && <Button size="sm" variant="outline" onClick={() => setModal({ evaluation: null })}><Plus size={14} className="mr-1" />New evaluation</Button>}
-          {applicationStatus === 'evaluation_completed' && <Button size="sm" variant="success" loading={approving} onClick={approve}>Approve teacher</Button>}
+          {applicationStatus === 'evaluation_completed' && <Button size="sm" variant="success" loading={approving} disabled={!feeResolved} title={!feeResolved ? 'Mark the registration fee as paid or skipped first' : undefined} onClick={approve}>Approve teacher</Button>}
         </div>
       </CardHeader>
       <CardBody className="p-5 space-y-3">

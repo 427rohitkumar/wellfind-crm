@@ -4,11 +4,13 @@ import { Navbar } from './Navbar';
 import { useAppShell } from '../../context/AppShellContext';
 import { useTheme } from '../../context/ThemeContext';
 import { EnquiryCountProvider } from '../../context/EnquiryCountContext';
+import { useTableDragScroll } from '../../hooks/useTableDragScroll';
 import { Sun, Moon } from 'lucide-react';
 import { clsx } from 'clsx';
 
 export function Layout() {
   const { isSidebarCollapsed, isSidebarVisible, isMobile, setSidebarVisible } = useAppShell();
+  useTableDragScroll();
 
   return (
     <EnquiryCountProvider>

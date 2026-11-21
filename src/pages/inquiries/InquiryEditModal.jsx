@@ -1,13 +1,15 @@
+import { Alert } from '@/components/ui/Alert'
+import { Spinner } from '@/components/ui/Loaders'
 import { useState } from 'react'
 import {
   Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogClose,
   Button
 } from '@/components/ui'
-import { AlertCircle, Save, Loader2, BookOpen, GraduationCap, Shield } from 'lucide-react'
-import { updateStudentEnquiry, STUDENT_ENQUIRY_STATUSES } from '@/services/studentEnquiryService'
+import { AlertCircle, Save, BookOpen, GraduationCap, Shield } from 'lucide-react'
+import { updateStudentEnquiry, getStudentStatusOptions } from '@/services/studentEnquiryService'
 import {
   updateTeacherEnquiry,
-  TEACHER_APPLICATION_STATUSES,
+  getTeacherStatusOptions,
   TEACHER_AVAILABILITY_STATUSES
 } from '@/services/teacherEnquiryService'
 import { getAuthUser } from '@/services/apiClient'
@@ -281,33 +283,7 @@ export function InquiryEditModal({
           <DialogBody className="space-y-5 max-h-[72vh] overflow-y-auto pr-1">
             {/* Global Error Banner */}
             {errorMessage && (
-              <div
-                className="alert alert--danger"
-                role="alert"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  padding: '0.75rem 1rem',
-                  borderRadius: 'var(--radius-md, 0.5rem)',
-                  backgroundColor: 'color-mix(in oklch, var(--color-danger) 10%, var(--color-surface, #fff))',
-                  border: 'none',
-                  color: 'var(--color-danger, #e52629)',
-                }}
-              >
-                <AlertCircle
-                  className="shrink-0"
-                  style={{
-                    width: '18px',
-                    height: '18px',
-                    color: 'var(--color-danger, #e52629)',
-                  }}
-                  aria-hidden="true"
-                />
-                <span className="text-sm font-medium leading-normal flex-1">
-                  {errorMessage}
-                </span>
-              </div>
+              <Alert variant="error" title="Something needs your attention." />
             )}
 
             {/* Section 1: Status & Administration (Enforces Transition & Mandatory Reasons) */}
@@ -335,12 +311,15 @@ export function InquiryEditModal({
                     disabled={saving}
                   >
                     {type === 'student'
-                      ? STUDENT_ENQUIRY_STATUSES.map((s) => (
+                      ? getStudentStatusOptions(initialStatus)
+                          // Test scheduling and allocation hand-off have their own dialogs.
+                          .filter((s) => s.value === initialStatus || !['test', 'converted'].includes(s.value))
+                          .map((s) => (
                           <option key={s.value} value={s.value}>
                             {s.label}
                           </option>
                         ))
-                      : TEACHER_APPLICATION_STATUSES.map((s) => (
+                      : getTeacherStatusOptions(initialStatus).map((s) => (
                           <option key={s.value} value={s.value}>
                             {s.label}
                           </option>
@@ -771,7 +750,7 @@ export function InquiryEditModal({
             <Button variant="primary" type="submit" loading={saving} disabled={saving}>
               {saving ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Spinner size={16} className="mr-2" />
                   Saving...
                 </>
               ) : (

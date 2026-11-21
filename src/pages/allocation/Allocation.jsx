@@ -1,3 +1,4 @@
+import { Alert } from '@/components/ui/Alert'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
@@ -259,12 +260,7 @@ export default function Allocation() {
         </Button>
       </header>
 
-      {error && (
-        <div className="allocation-page__alert" role="alert">
-          <AlertCircle size={17} />
-          {error}
-        </div>
-      )}
+      {error && <Alert variant="error" title={error} />}
 
       <section className="allocation-status-summary" aria-label="Student and teacher allocation status">
         <AllocationStatusCard

@@ -1,9 +1,11 @@
+import { Alert } from '@/components/ui/Alert'
+import { Spinner } from '@/components/ui/Loaders'
 import { useState } from 'react'
 import {
   Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogClose,
   Button
 } from '@/components/ui'
-import { AlertCircle, Trash2, Loader2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { deleteStudentEnquiry } from '@/services/studentEnquiryService'
 import { deleteTeacherEnquiry } from '@/services/teacherEnquiryService'
 
@@ -61,33 +63,7 @@ export function InquiryDeleteModal({
 
         <DialogBody className="space-y-3">
           {errorMessage && (
-            <div
-              className="alert alert--danger"
-              role="alert"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-md, 0.5rem)',
-                backgroundColor: 'color-mix(in oklch, var(--color-danger) 10%, var(--color-surface, #fff))',
-                border: 'none',
-                color: 'var(--color-danger, #e52629)',
-              }}
-            >
-              <AlertCircle
-                className="shrink-0"
-                style={{
-                  width: '18px',
-                  height: '18px',
-                  color: 'var(--color-danger, #e52629)',
-                }}
-                aria-hidden="true"
-              />
-              <span className="text-sm font-medium leading-normal flex-1">
-                {errorMessage}
-              </span>
-            </div>
+            <Alert variant="error" title="Something needs your attention." />
           )}
 
           <div
@@ -113,7 +89,7 @@ export function InquiryDeleteModal({
           <Button variant="danger" onClick={handleDelete} loading={deleting} disabled={deleting}>
             {deleting ? (
               <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                <Spinner size={16} className="mr-2" />
                 Deleting...
               </>
             ) : (

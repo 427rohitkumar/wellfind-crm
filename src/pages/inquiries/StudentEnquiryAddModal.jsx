@@ -1,21 +1,7 @@
+import { Alert } from '@/components/ui/Alert'
+import { Spinner } from '@/components/ui/Loaders'
 import { useState, useRef, useEffect } from 'react'
-import {
-  X,
-  Check,
-  MapPin,
-  Clock,
-  BookOpen,
-  GraduationCap,
-  User,
-  Sparkles,
-  ArrowLeft,
-  ArrowRight,
-  Send,
-  Loader2,
-  CheckCircle2,
-  RotateCcw,
-  AlertCircle
-} from 'lucide-react'
+import { X, Check, MapPin, Clock, BookOpen, GraduationCap, User, Sparkles, ArrowLeft, ArrowRight, Send, CheckCircle2, RotateCcw } from 'lucide-react'
 import {
   INITIAL_FORM_DATA,
   CLASS_OPTIONS,
@@ -41,7 +27,7 @@ export function StudentEnquiryAddModal({
   const [submissionResult, setSubmissionResult] = useState(null)
   const [apiError, setApiError] = useState(null)
 
-  const totalSteps = 5
+  const totalSteps = 6
   const modalBodyRef = useRef(null)
 
   // Reset state when modal is closed / opened
@@ -381,7 +367,7 @@ export function StudentEnquiryAddModal({
                       <div className="mb-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
                           <GraduationCap className="w-3.5 h-3.5" />
-                          <span>Step 1 of 5</span>
+                          <span>Step 1 of 6</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">
                           Select Student&apos;s Class
@@ -456,7 +442,7 @@ export function StudentEnquiryAddModal({
                       <div className="mb-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
                           <BookOpen className="w-3.5 h-3.5" />
-                          <span>Step 2 of 5</span>
+                          <span>Step 2 of 6</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">
                           Select Required Subject(s)
@@ -565,7 +551,7 @@ export function StudentEnquiryAddModal({
                       <div className="mb-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
                           <Clock className="w-3.5 h-3.5" />
-                          <span>Step 3 of 5</span>
+                          <span>Step 3 of 6</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">
                           Preferred Tuition Timing
@@ -655,7 +641,7 @@ export function StudentEnquiryAddModal({
                       <div className="mb-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
                           <MapPin className="w-3.5 h-3.5" />
-                          <span>Step 4 of 5</span>
+                          <span>Step 4 of 6</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">
                           Locality in Patna & Budget
@@ -750,9 +736,48 @@ export function StudentEnquiryAddModal({
                 )}
 
                 {/* ---------------------------------------------------- */}
-                {/* STEP 5: CONTACT DETAILS */}
+                {/* STEP 5: GENDER & TEACHER PREFERENCE */}
                 {/* ---------------------------------------------------- */}
                 {currentStep === 5 && (
+                  <div className="animate-fade-in" style={{ maxWidth: 560, margin: '0 auto' }}>
+                    <div className="mb-3">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
+                        <User className="w-3.5 h-3.5" />
+                        <span>Step 5 of 6</span>
+                      </div>
+                      <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">Gender &amp; Teacher Preference</h3>
+                      <p className="text-xs sm:text-sm text-[#53647D] mt-0.5">Helps us match a teacher who is the right fit for the student.</p>
+                    </div>
+                    <div className="student-enquiry-contact-fields">
+                      <div>
+                        <span className="block text-xs font-bold text-[#101D36] uppercase tracking-wider mb-1">Student&apos;s gender <span className="text-red-500">*</span></span>
+                        <div className="wf-genderpick" role="radiogroup">
+                          {[['male', 'Boy', '👦'], ['female', 'Girl', '👧'], ['other', 'Other', '🧑']].map(([v, l, e]) => (
+                            <button key={v} type="button" role="radio" aria-checked={formData.studentGender === v} className={formData.studentGender === v ? 'is-on' : ''} onClick={() => handleFieldChange({ studentGender: v })}>
+                              <span>{e}</span><b>{l}</b>
+                            </button>
+                          ))}
+                        </div>
+                        {stepError?.field === 'studentGender' && <p className="text-xs text-red-600 font-semibold mt-1">{stepError.message}</p>}
+                      </div>
+                      <div>
+                        <span className="block text-xs font-bold text-[#101D36] uppercase tracking-wider mb-1">Preferred teacher <span className="text-[#53647D] lowercase font-normal">(optional)</span></span>
+                        <div className="wf-genderpick" role="radiogroup">
+                          {[['male', 'Male teacher', '👨‍🏫'], ['female', 'Female teacher', '👩‍🏫'], ['any', 'Anyone', '🙂']].map(([v, l, e]) => (
+                            <button key={v} type="button" role="radio" aria-checked={formData.preferredTeacherGender === v} className={formData.preferredTeacherGender === v ? 'is-on' : ''} onClick={() => handleFieldChange({ preferredTeacherGender: v })}>
+                              <span>{e}</span><b>{l}</b>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ---------------------------------------------------- */}
+                {/* STEP 6: CONTACT DETAILS */}
+                {/* ---------------------------------------------------- */}
+                {currentStep === 6 && (
                   <div className="student-enquiry-step-row student-enquiry-step-row--top student-enquiry-step-row--contact animate-fade-in">
                     {/* Character & Summary (Left) */}
                     <div className="student-enquiry-col-illustration">
@@ -803,10 +828,10 @@ export function StudentEnquiryAddModal({
                       <div className="mb-3">
                         <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#D7F6F1] text-[#0F6F63] text-xs font-bold uppercase tracking-wider mb-1">
                           <User className="w-3.5 h-3.5" />
-                          <span>Step 5 of 5</span>
+                          <span>Step 6 of 6</span>
                         </div>
                         <h3 className="text-xl sm:text-2xl font-black text-[#101D36] tracking-tight">
-                          Parent Contact Information
+                          Student &amp; Contact Details
                         </h3>
                         <p className="text-xs sm:text-sm text-[#53647D] mt-0.5">
                           Our academic counselor in Patna will contact you to confirm tutor profiles and demo schedule.
@@ -820,7 +845,7 @@ export function StudentEnquiryAddModal({
                             htmlFor="parentName"
                             className="block text-xs font-bold text-[#101D36] uppercase tracking-wider mb-1"
                           >
-                            Parent / Guardian Name <span className="text-red-500">*</span>
+                            Student&apos;s Name <span className="text-red-500">*</span>
                           </label>
                           <div className="student-enquiry-parent-name-field">
                             <input
@@ -828,7 +853,7 @@ export function StudentEnquiryAddModal({
                               id="parentName"
                               value={formData.parentName}
                               onChange={(e) => handleFieldChange({ parentName: e.target.value })}
-                              placeholder="e.g. Rajesh Sharma"
+                              placeholder="Name of the student who will study"
                               className={`w-full px-3.5 py-2 rounded-xl border text-xs sm:text-sm font-medium focus:outline-none focus:ring-2 ${
                                 stepError?.field === 'parentName'
                                   ? 'border-red-400 bg-red-50/50 focus:ring-red-300'
@@ -934,13 +959,7 @@ export function StudentEnquiryAddModal({
               <div className="w-full max-w-5xl mx-auto">
                 {/* Global / Step Error Alert */}
                 {(stepError?.message || apiError) && (
-                  <div
-                    role="alert"
-                    className="mb-2 px-3 py-1.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold flex items-center gap-2 animate-fade-in"
-                  >
-                    <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-                    <span className="flex-1">{apiError || stepError?.message}</span>
-                  </div>
+                  <Alert variant="error" title={apiError || stepError?.message} className="mb-2" />
                 )}
 
                 <div className="flex items-center justify-between gap-3">
@@ -987,7 +1006,7 @@ export function StudentEnquiryAddModal({
                       >
                         {isSubmitting ? (
                           <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <Spinner size={16} />
                             <span>Submitting...</span>
                           </>
                         ) : (

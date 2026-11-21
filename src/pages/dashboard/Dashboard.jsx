@@ -1,9 +1,9 @@
+import { Alert } from '@/components/ui/Alert'
+import { usePermissions } from '@/hooks/usePermissions'
+import { PageLoader } from '@/components/ui/Loaders'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  CalendarDays, CheckCircle2, Clock3, GraduationCap,
-  RefreshCw, School, Search, UserCheck, Users, UserRound, XCircle,
-} from 'lucide-react'
+import { CalendarDays, CheckCircle2, Clock3, GraduationCap, RefreshCw, School, Search, UserCheck, Users, UserRound } from 'lucide-react'
 import { Badge, Button, Card, CardBody, CardHeader, Chart } from '../../components/ui'
 import { fetchStudents } from '../../services/studentService'
 import { fetchTeachers } from '../../services/teacherService'
@@ -90,15 +90,16 @@ export default function Dashboard() {
   const [error, setError] = useState('')
   const [dateRange, setDateRange] = useState('30d')
 
+  const { can } = usePermissions()
   const loadDashboard = useCallback(async (refresh = false) => {
     setError('')
     if (refresh) setRefreshing(true)
     else setLoading(true)
     try {
       const [studentResult, teacherResult, enquiryResult] = await Promise.all([
-        fetchStudents({ page: 1, limit: 100, status: 'active' }),
-        fetchTeachers({ page: 1, limit: 100 }),
-        fetchStudentEnquiries({ page: 1, limit: 100, sort: '-createdAt' }),
+        can('students') ? fetchStudents({ page: 1, limit: 100, status: 'active' }) : Promise.resolve(null),
+        can('teachers') ? fetchTeachers({ page: 1, limit: 100 }) : Promise.resolve(null),
+        can('student_inquiries') ? fetchStudentEnquiries({ page: 1, limit: 100, sort: '-createdAt' }) : Promise.resolve(null),
       ])
       setStudents(studentResult?.docs || [])
       setTeachers(teacherResult?.docs || [])
@@ -114,7 +115,7 @@ export default function Dashboard() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [])
+  }, [can])
 
   // Initial data loading synchronizes the dashboard with the existing API services.
   // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -151,13 +152,15 @@ export default function Dashboard() {
   const classOptions = { chart: { type: 'bar', toolbar: { show: false } }, colors: ['var(--color-primary)'], plotOptions: { bar: { borderRadius: 4, columnWidth: '60%' } }, dataLabels: { enabled: false }, xaxis: { categories: classCategories, labels: { rotate: -45 } }, yaxis: { labels: { formatter: (value) => Math.round(value) } }, tooltip: { theme: 'dark', y: { formatter: (value) => `${value} students` } }, grid: { borderColor: 'var(--color-border)', strokeDashArray: 4 } }
   const boardOptions = { chart: { type: 'donut', toolbar: { show: false } }, labels: boardCategories, colors: ['var(--color-primary)', 'var(--color-info)', 'var(--color-warning)', 'var(--color-success)', 'var(--color-border-strong)'], legend: { position: 'bottom', labels: { colors: 'var(--color-muted-foreground)' } }, dataLabels: { enabled: false }, stroke: { width: 0 }, plotOptions: { pie: { donut: { size: '68%' } } }, tooltip: { theme: 'dark', y: { formatter: (value) => `${value} students` } } }
 
+  if (loading) return <PageLoader label="Loading dashboard…" />
+
   return (
     <div className="page__section academic-dashboard">
       <header className="page__header">
         <div className="page__headline"><h1 className="page__title">Welcome back, {user?.name || user?.firstName || 'Admin'} <span aria-hidden="true">👋</span></h1><p className="page__description">Here is your Wellfind Academic operations overview.</p></div>
         <div className="academic-dashboard__actions"><select value={dateRange} onChange={(event) => setDateRange(event.target.value)} aria-label="Dashboard date range"><option value="today">Today</option><option value="7d">Last 7 Days</option><option value="30d">Last 30 Days</option><option value="month">This Month</option><option value="year">This Year</option></select><Button variant="outline" size="sm" onClick={() => void loadDashboard(true)} loading={refreshing}><RefreshCw size={15} /> Refresh</Button></div>
       </header>
-      {error && <div className="academic-dashboard__alert" role="alert"><XCircle size={16} />{error}</div>}
+      {error && <Alert variant="error" title={error} />}
       <div className="academic-data-note"><School size={16} /><span>CRM metrics use available records. Website analytics, gender, board, and capacity data are shown as unavailable when the source fields or secure integration are missing.</span></div>
 
       <section className="academic-metric-grid">
@@ -183,7 +186,7 @@ export default function Dashboard() {
         <SectionCard title="Daily Enquiry Trend" description="CRM enquiries received in the recent seven-day window."><Chart type="area" series={[{ name: 'Enquiries', data: trendDays.map((day) => day.value) }]} options={trendOptions} height={250} /></SectionCard>
       </section>
       <SectionCard title="Recent Enquiries" description="Latest enquiry records from the CRM." className="academic-recent-enquiries">
-        <div className="academic-table-wrap"><table className="academic-table"><thead><tr><th>Enquiry ID</th><th>Student</th><th>Class</th><th>Subjects</th><th>Enquiry Date</th><th>Status</th><th>Assigned Teacher</th><th>Action</th></tr></thead><tbody>{loading ? <tr><td colSpan="8" className="academic-table__state">Loading enquiries…</td></tr> : !sources.enquiries ? <tr><td colSpan="8" className="academic-table__state">Enquiry data unavailable.</td></tr> : periodEnquiries.length === 0 ? <tr><td colSpan="8" className="academic-table__state">No enquiries found for the selected period.</td></tr> : periodEnquiries.slice(0, 8).map((enquiry) => <tr key={enquiry.id}><td><Link to={`/admin/student-enquiries/${enquiry.id}`}>{enquiry.id}</Link></td><td><strong>{enquiry.name || 'Not provided'}</strong></td><td>{enquiry.studentClass || 'Not provided'}</td><td>{Array.isArray(enquiry.subjects) ? enquiry.subjects.join(', ') : enquiry.subjects || 'Not provided'}</td><td>{enquiry.createdAt ? new Date(enquiry.createdAt).toLocaleDateString('en-IN') : 'Not provided'}</td><td><Badge variant={enquiry.enquiryStatus === 'allocated' ? 'success' : enquiry.enquiryStatus === 'closed' ? 'neutral' : 'warning'} size="sm">{enquiry.enquiryStatus || 'Not provided'}</Badge></td><td>{enquiry.assignedTo?.name || 'Unassigned'}</td><td><Link className="academic-view-link" to={`/admin/student-enquiries/${enquiry.id}`}>View</Link></td></tr>)}</tbody></table></div><div className="academic-table-footer"><Link to="/inquiries">View all enquiries</Link><span>{convertedEnquiries.length} converted in selected period</span></div>
+        <div className="academic-table-wrap"><table className="academic-table"><thead><tr><th>Enquiry ID</th><th>Student</th><th>Class</th><th>Subjects</th><th>Enquiry Date</th><th>Status</th><th>Assigned Teacher</th><th>Action</th></tr></thead><tbody>{loading ? <tr><td colSpan="8" className="academic-table__state">Loading enquiries…</td></tr> : !sources.enquiries ? <tr><td colSpan="8" className="academic-table__state">Enquiry data unavailable.</td></tr> : periodEnquiries.length === 0 ? <tr><td colSpan="8" className="academic-table__state">No enquiries found for the selected period.</td></tr> : periodEnquiries.slice(0, 8).map((enquiry) => <tr key={enquiry.id}><td><Link to={`/admin/student-enquiries/${enquiry.id}`}>{enquiry.id}</Link></td><td><strong>{enquiry.name || 'Not provided'}</strong></td><td>{enquiry.studentClass || 'Not provided'}</td><td>{Array.isArray(enquiry.subjects) ? enquiry.subjects.join(', ') : enquiry.subjects || 'Not provided'}</td><td>{enquiry.createdAt ? new Date(enquiry.createdAt).toLocaleDateString('en-IN') : 'Not provided'}</td><td><Badge variant={enquiry.enquiryStatus === 'allocated' ? 'success' : enquiry.enquiryStatus === 'closed' ? 'neutral' : 'warning'} size="sm">{enquiry.enquiryStatus || 'Not provided'}</Badge></td><td>{enquiry.assignedTo?.name || 'Unassigned'}</td><td><Link className="academic-view-link" to={`/admin/student-enquiries/${enquiry.id}`}>View</Link></td></tr>)}</tbody></table></div><div className="academic-table-footer"><Link to="/admin/inquiries">View all enquiries</Link><span>{convertedEnquiries.length} converted in selected period</span></div>
       </SectionCard>
     </div>
   )

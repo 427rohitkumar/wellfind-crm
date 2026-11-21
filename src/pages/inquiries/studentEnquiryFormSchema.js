@@ -12,6 +12,8 @@ export const INITIAL_FORM_DATA = {
   customLocality: '',
   budgetRange: '₹4,000 – ₹6,500 / month',
   parentName: '',
+  studentGender: '',
+  preferredTeacherGender: 'any',
   phoneNumber: '',
   additionalNotes: '',
   agreedToPolicy: true,
@@ -78,6 +80,7 @@ export const STEP_LABELS = [
   'Subjects',
   'Preferred Timing',
   'Locality & Budget',
+  'Gender Preference',
   'Contact Details',
 ];
 
@@ -137,19 +140,25 @@ export function validateStep(step, data) {
       }
       return null;
 
-    case 5: {
+    case 5:
+      if (!data.studentGender) {
+        return { step: 5, field: 'studentGender', message: 'Kripya student ka gender select kijiye.' };
+      }
+      return null;
+
+    case 6: {
       if (!data.parentName || !data.parentName.trim()) {
         return {
-          step: 5,
+          step: 6,
           field: 'parentName',
-          message: 'Kripya Parent ya Guardian ka naam enter kijiye.',
+          message: 'Kripya student ka naam enter kijiye (parent ka naam nahi).',
         };
       }
 
       const cleanPhone = (data.phoneNumber || '').replace(/\D/g, '');
       if (!cleanPhone || cleanPhone.length !== 10) {
         return {
-          step: 5,
+          step: 6,
           field: 'phoneNumber',
           message: 'Kripya 10-digit mobile number enter kijiye.',
         };
@@ -157,7 +166,7 @@ export function validateStep(step, data) {
 
       if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
         return {
-          step: 5,
+          step: 6,
           field: 'phoneNumber',
           message: 'Kripya valid 10-digit Indian mobile number enter kijiye (starts with 6-9).',
         };
@@ -165,7 +174,7 @@ export function validateStep(step, data) {
 
       if (!data.agreedToPolicy) {
         return {
-          step: 5,
+          step: 6,
           field: 'agreedToPolicy',
           message: 'Kripya contact policy consent confirm kijiye.',
         };
@@ -184,7 +193,7 @@ export function validateStep(step, data) {
  * Returns the first error found, or null if valid.
  */
 export function validateEntireForm(data) {
-  for (let s = 1; s <= 5; s++) {
+  for (let s = 1; s <= 6; s++) {
     const error = validateStep(s, data);
     if (error) return error;
   }

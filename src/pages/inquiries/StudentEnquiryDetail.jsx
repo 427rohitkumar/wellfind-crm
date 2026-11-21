@@ -1,20 +1,21 @@
+import { Alert } from '@/components/ui/Alert'
+import { PageLoader, Spinner } from '@/components/ui/Loaders'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   Card, CardHeader, CardBody,
   Button, Badge
 } from '@/components/ui'
-import {
-  ArrowLeft, ChevronLeft, User, Phone, Mail, MapPin, Clock, DollarSign,
-  BookOpen, Calendar, Shield, AlertCircle, CheckCircle2,
-  History, Save, Loader2, ArrowRight
-} from 'lucide-react'
-import { convertStudentEnquiry } from '@/services/adminApi'
+import { ArrowLeft, ChevronLeft, User, Phone, Mail, MapPin, Clock, DollarSign, BookOpen, Calendar, Shield, AlertCircle, History, Save, ArrowRight, GraduationCap, ClipboardCheck, Globe, Check } from 'lucide-react'
 import {
   getStudentEnquiryById,
   updateStudentEnquiry,
+  getStudentStatusOptions,
+  getStudentStatusLabel,
   STUDENT_ENQUIRY_STATUSES
 } from '@/services/studentEnquiryService'
+import { StudentStatusModal } from './StudentStatusModal'
+import { listEnquiryTests } from '@/services/adminApi'
 import { fetchEnquiryAuditLog } from '@/services/enquiryAuditService'
 import { getAuthUser } from '@/services/apiClient'
 import { useEnquiryCounts } from '@/context/EnquiryCountContext'
@@ -30,7 +31,7 @@ export default function StudentEnquiryDetail() {
   const [error, setError] = useState(null)
 
   // Management controls
-  const [converting, setConverting] = useState(false)
+  const [statusAction, setStatusAction] = useState(null) // { target } for the status modal
   const [selectedStatus, setSelectedStatus] = useState('new')
   const [adminNotes, setAdminNotes] = useState('')
   const [reason, setReason] = useState('')
@@ -49,19 +50,24 @@ export default function StudentEnquiryDetail() {
   const [loadingAudit, setLoadingAudit] = useState(false)
   const [auditError, setAuditError] = useState(null)
 
-  const handleConvert = async () => {
-    if (!window.confirm('Convert this enquiry into a student record? This cannot be undone.')) return
-    setConverting(true)
-    setSaveError('')
-    try {
-      const res = await convertStudentEnquiry(id)
-      const studentId = res?.student?.id ?? res?.studentId ?? res?.id
-      navigate(studentId ? `/admin/student-records/${studentId}` : '/admin/student-records')
-    } catch (e) {
-      setSaveError(e.message)
-    } finally {
-      setConverting(false)
+  const handleActionDone = (result) => {
+    setStatusAction(null)
+    if (result.kind === 'test') {
+      navigate(result.testId ? `/admin/tests/${result.testId}` : '/admin/tests')
+      return
     }
+    if (result.kind === 'converted') {
+      // The enquiry is complete: the student continues in the Students tab, where a teacher is allocated.
+      navigate('/admin/students')
+      return
+    }
+    if (result.doc?.id) {
+      setData(result.doc)
+      setSelectedStatus(result.doc.enquiryStatus || 'new')
+      setAdminNotes(result.doc.adminNotes || '')
+    }
+    setSaveSuccess('Enquiry updated.')
+    loadAuditHistory()
   }
 
   const loadData = useCallback(async () => {
@@ -154,6 +160,17 @@ export default function StudentEnquiryDetail() {
     }
   }, [id, markAsRead])
 
+  // The test itself lives in the Tests module: find this enquiry's test and open it.
+  const openTest = async () => {
+    try {
+      const res = await listEnquiryTests({ enquiry: id, limit: 1 })
+      const test = res?.docs?.[0]
+      navigate(test ? `/admin/tests/${test.id}` : '/admin/tests')
+    } catch (err) {
+      setSaveError(err.message || 'Could not open the test.')
+    }
+  }
+
   const handleStatusUpdate = async (e) => {
     if (e) e.preventDefault()
 
@@ -185,7 +202,7 @@ export default function StudentEnquiryDetail() {
       const res = await updateStudentEnquiry(id, payload)
       const updated = res?.doc || res
       setData(updated)
-      setSaveSuccess(`Status successfully updated to ${selectedStatus.toUpperCase()}`)
+      setSaveSuccess(`Saved. Status is now ${getStudentStatusLabel(selectedStatus)}.`)
       setShowConfirmClose(false)
       setReason('')
 
@@ -212,10 +229,7 @@ export default function StudentEnquiryDetail() {
 
   if (loading) {
     return (
-      <div className="page__section py-16 flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <Loader2 className="animate-spin text-primary" size={32} />
-        <div className="text-sm font-medium text-muted-foreground">Loading student enquiry details...</div>
-      </div>
+      <PageLoader label="Loading student enquiry details" />
     )
   }
 
@@ -232,7 +246,7 @@ export default function StudentEnquiryDetail() {
               {error || `Student enquiry #${id} could not be retrieved or does not exist.`}
             </p>
             <div className="flex items-center gap-3 mt-2">
-              <Button variant="outline" onClick={() => navigate('/inquiries')}>
+              <Button variant="outline" onClick={() => navigate('/admin/inquiries')}>
                 <ArrowLeft size={16} /> Back to Inquiries
               </Button>
               <Button variant="primary" onClick={loadData}>
@@ -254,7 +268,7 @@ export default function StudentEnquiryDetail() {
         <div className="page__headline">
           <nav className="breadcrumb mb-2">
             <span className="breadcrumb__item">
-              <Link to="/inquiries" className="hover:text-primary transition-colors flex items-center gap-1.5">
+              <Link to="/admin/inquiries" className="hover:text-primary transition-colors flex items-center gap-1.5">
                 <ChevronLeft size={14} /> Inquiries
               </Link>
             </span>
@@ -273,45 +287,41 @@ export default function StudentEnquiryDetail() {
         </div>
 
         <div className="page__action flex items-center gap-2">
-          {['new', 'contacted', 'in_progress'].includes(data.enquiryStatus) && (
-            <Button variant="success" size="sm" loading={converting} onClick={handleConvert}>
-              <GraduationCap size={16} className="mr-1" /> Convert to Student
+          {data.enquiryStatus === 'in_progress' && (
+            <Button variant="outline" size="sm" onClick={() => setStatusAction({ target: 'test' })}>
+              <ClipboardCheck size={16} className="mr-1" /> Request Test
             </Button>
           )}
-          {data.enquiryStatus === 'converted' && (
-            <Button variant="outline" size="sm" onClick={() => navigate(`/admin/student-records?search=${encodeURIComponent(data.name || '')}`)}>
-              <GraduationCap size={16} className="mr-1" /> View Student Record
+          {data.enquiryStatus === 'test' && (
+            <Button variant="outline" size="sm" onClick={openTest}>
+              <ClipboardCheck size={16} className="mr-1" /> Open in Tests
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => navigate('/inquiries')}>
+          {['in_progress', 'test'].includes(data.enquiryStatus) && (
+            <Button variant="success" size="sm" onClick={() => setStatusAction({ target: 'converted' })}>
+              <GraduationCap size={16} className="mr-1" /> Move to Students
+            </Button>
+          )}
+          {['converted', 'allocated'].includes(data.enquiryStatus) && (
+            <Button variant="outline" size="sm" onClick={() => navigate('/admin/students')}>
+              <GraduationCap size={16} className="mr-1" /> Open in Students
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={() => navigate('/admin/inquiries')}>
             <ChevronLeft size={16} className="mr-1" /> Back to List
           </Button>
         </div>
       </header>
 
+      <EnquiryFlow status={data.enquiryStatus || 'new'} hadTest={Boolean(data.testMode)} />
+
       {/* Success / Error Alerts */}
       {saveSuccess && (
-        <div className="p-3 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            <span>{saveSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setSaveSuccess('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="success" title={saveSuccess} onClose={() => setSaveSuccess('')} />
       )}
 
       {saveError && (
-        <div className="p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={16} />
-            <span>{saveError}</span>
-          </div>
-          <button type="button" onClick={() => setSaveError('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="error" title={saveError} onClose={() => setSaveError('')} />
       )}
 
       {/* Grid Layout: Main 2/3 + 1/3 columns */}
@@ -322,191 +332,130 @@ export default function StudentEnquiryDetail() {
           <div className="enquiry-cards-row">
             {/* Card: Student & Academic Requirements */}
             <Card variant="hover" className="h-full flex flex-col">
-              <CardHeader className="border-b border-border py-3.5 px-5">
-                <div className="flex items-center gap-2">
-                  <BookOpen size={18} className="text-primary shrink-0" />
-                  <h3 className="card__title">Academic Requirements</h3>
+              <div className="wf-cardhead"><h3><BookOpen size={18} />Academic Requirements</h3></div>
+              <dl className="wf-info">
+                <div><dt>Student / Parent</dt><dd>{data.name}</dd></div>
+                <div><dt>Grade / Class</dt><dd>{data.studentClass || '—'}</dd></div>
+                <div><dt>Student gender</dt><dd>{{ male: 'Boy', female: 'Girl', other: 'Other' }[data.studentGender] || <span className="is-empty">Not given</span>}</dd></div>
+                <div><dt>Teacher wanted</dt><dd>{{ male: 'Male teacher', female: 'Female teacher', any: 'Anyone' }[data.preferredTeacherGender] || 'Anyone'}</dd></div>
+                <div>
+                  <dt>Subjects</dt>
+                  <dd>
+                    {(() => {
+                      const list = Array.isArray(data.subjects)
+                        ? data.subjects.map((s) => (typeof s === 'string' ? s : s?.name || s?.subject)).filter(Boolean)
+                        : data.subjects ? [data.subjects] : []
+                      if (data.customSubject) list.push(data.customSubject)
+                      return list.length
+                        ? list.map((s, i) => <span key={i} className="wf-chip">{s}</span>)
+                        : <span className="is-empty">Not specified</span>
+                    })()}
+                  </dd>
                 </div>
-              </CardHeader>
-              <CardBody className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div className="space-y-3.5 text-sm">
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Student / Parent Name</span>
-                    <span className="font-semibold text-foreground text-sm block">{data.name}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Grade / Class</span>
-                    <span className="font-semibold text-foreground text-sm block">{data.studentClass || '—'}</span>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Subjects Required</span>
-                    <div className="flex flex-wrap gap-1.5 mt-0.5">
-                      {Array.isArray(data.subjects) && data.subjects.length > 0 ? (
-                        data.subjects.map((sub, idx) => (
-                          <span key={idx} className="px-2.5 py-1 text-xs rounded-md bg-primary/10 text-primary font-semibold">
-                            {typeof sub === 'string' ? sub : sub?.name || sub?.subject || JSON.stringify(sub)}
-                          </span>
-                        ))
-                      ) : typeof data.subjects === 'string' && data.subjects ? (
-                        <span className="px-2.5 py-1 text-xs rounded-md bg-primary/10 text-primary font-semibold">
-                          {data.subjects}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground italic text-sm">Not specified</span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Monthly Budget</span>
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-foreground text-sm">
-                      <DollarSign size={14} className="text-success shrink-0" />
-                      <span>{data.budget ? `₹${data.budget}` : 'Flexible / Undisclosed'}</span>
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Preferred Schedule / Timings</span>
-                    <span className="inline-flex items-center gap-2 text-foreground text-sm">
-                      <Clock size={14} className="text-muted-foreground shrink-0" />
-                      <span>{data.preferredTime || 'Flexible'}</span>
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Target Start Date</span>
-                    <span className="inline-flex items-center gap-2 text-foreground text-sm">
-                      <Calendar size={14} className="text-muted-foreground shrink-0" />
-                      <span>{data.startDate ? new Date(data.startDate).toLocaleDateString() : 'Immediate'}</span>
-                    </span>
-                  </div>
+                <div><dt>Monthly budget</dt><dd><DollarSign size={15} />{data.budgetRange || 'Flexible / Undisclosed'}</dd></div>
+                <div><dt>Preferred timing</dt><dd><Clock size={15} />{data.preferredTiming || 'Flexible'}</dd></div>
+                <div><dt>Target start</dt><dd><Calendar size={15} />{data.startDate ? new Date(data.startDate).toLocaleDateString() : 'Immediate'}</dd></div>
+              </dl>
+              {(data.additionalNotes || data.message) && (
+                <div className="wf-note">
+                  <b>Parent / student note</b>
+                  <p>{data.additionalNotes || data.message}</p>
                 </div>
-
-                {data.message && (
-                  <div className="bg-surface-2 p-3.5 rounded-lg border border-border mt-2">
-                    <span className="text-xs font-semibold text-muted-foreground block mb-1">Parent / Student Requirement Note</span>
-                    <p className="text-xs text-foreground whitespace-pre-wrap leading-relaxed">{data.message}</p>
-                  </div>
-                )}
-              </CardBody>
+              )}
             </Card>
 
             {/* Card: Contact Details & Locality */}
             <Card variant="hover" className="h-full flex flex-col">
-              <CardHeader className="border-b border-border py-3.5 px-5">
-                <div className="flex items-center gap-2">
-                  <User size={18} className="text-primary shrink-0" />
-                  <h3 className="card__title">Contact Details & Locality</h3>
+              <div className="wf-cardhead"><h3><User size={18} />Contact &amp; Locality</h3></div>
+              <dl className="wf-info">
+                <div>
+                  <dt>Mobile</dt>
+                  <dd>
+                    {data.phoneNumber || data.phone
+                      ? <a href={`tel:${data.phoneNumber || data.phone}`}><Phone size={15} />{data.phoneNumber || data.phone}</a>
+                      : <span className="is-empty">Not provided</span>}
+                  </dd>
                 </div>
-              </CardHeader>
-              <CardBody className="p-5 flex-1 flex flex-col justify-between space-y-4">
-                <div className="space-y-3.5 text-sm">
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Mobile Number</span>
-                    <a
-                      href={`tel:${data.phoneNumber || data.phone}`}
-                      className="font-mono text-sm text-primary hover:underline inline-flex items-center gap-2 font-medium"
-                    >
-                      <Phone size={14} className="text-muted-foreground shrink-0" />
-                      <span>{data.phoneNumber || data.phone || '—'}</span>
-                    </a>
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Email Address</span>
-                    {data.email ? (
-                      <a
-                        href={`mailto:${data.email}`}
-                        className="text-primary hover:underline inline-flex items-center gap-2 text-sm font-medium"
-                      >
-                        <Mail size={14} className="text-muted-foreground shrink-0" />
-                        <span className="truncate">{data.email}</span>
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground italic text-sm">Not provided</span>
-                    )}
-                  </div>
-
-                  <div>
-                    <span className="text-xs text-muted-foreground block mb-1 font-medium">Locality / Address</span>
-                    <span className="inline-flex items-center gap-2 text-foreground font-medium text-sm">
-                      <MapPin size={14} className="text-muted-foreground shrink-0" />
-                      <span>{data.locality || data.address || 'Not specified'}</span>
-                    </span>
-                  </div>
+                <div>
+                  <dt>Email</dt>
+                  <dd>
+                    {data.email
+                      ? <a href={`mailto:${data.email}`}><Mail size={15} />{data.email}</a>
+                      : <span className="is-empty">Not provided</span>}
+                  </dd>
                 </div>
-              </CardBody>
+                <div>
+                  <dt>Locality</dt>
+                  <dd><MapPin size={15} />{[data.locality, data.customLocality].filter(Boolean).join(' · ') || 'Not specified'}</dd>
+                </div>
+              </dl>
             </Card>
           </div>
 
+          {data.testMode && (
+            <Card variant="hover">
+              <CardHeader className="border-b border-border py-3.5 px-5">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck size={18} className="text-primary shrink-0" />
+                  <h3 className="card__title">Assessment Test</h3>
+                </div>
+              </CardHeader>
+              <CardBody className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <span className="text-xs text-muted-foreground block mb-1 font-medium">Mode</span>
+                  <span className="inline-flex items-center gap-1.5 font-semibold">
+                    {data.testMode === 'physical' ? <MapPin size={14} /> : <Globe size={14} />}
+                    {data.testMode === 'physical' ? 'Physical (₹99)' : data.testMode === 'digital' ? 'Digital (₹49)' : 'Virtual'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block mb-1 font-medium">Scheduled</span>
+                  <span className="font-semibold">{data.testScheduledAt ? new Date(data.testScheduledAt).toLocaleString() : '—'}</span>
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground block mb-1 font-medium">{data.testMode === 'physical' ? 'Address' : 'Meeting link'}</span>
+                  <span className="font-semibold break-all">{data.testVenue || '—'}</span>
+                </div>
+                {data.testNotes && (
+                  <div className="sm:col-span-3 bg-surface-2 p-3 rounded-lg border border-border text-xs whitespace-pre-wrap">{data.testNotes}</div>
+                )}
+              </CardBody>
+            </Card>
+          )}
+
           {/* Card: Audit & Transition History */}
           <Card variant="hover">
-            <CardHeader className="border-b border-border py-3.5 px-5">
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-2">
-                  <History size={18} className="text-primary shrink-0" />
-                  <h3 className="card__title">Audit History</h3>
-                </div>
-                <Button variant="ghost" size="xs" onClick={loadAuditHistory} disabled={loadingAudit}>
-                  {loadingAudit ? <Loader2 size={12} className="animate-spin mr-1" /> : 'Refresh History'}
-                </Button>
-              </div>
-            </CardHeader>
-            <CardBody className="p-5">
-              {loadingAudit && (
-                <div className="py-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
-                  <Loader2 size={16} className="animate-spin text-primary shrink-0" />
-                  <span>Loading audit trail...</span>
-                </div>
-              )}
-
-              {auditError && (
-                <div className="p-3 bg-surface-2 rounded-lg border border-border text-xs text-muted-foreground flex items-center gap-2">
-                  <AlertCircle size={14} className="text-warning shrink-0" />
-                  <span>{auditError}</span>
-                </div>
-              )}
-
-              {!loadingAudit && !auditError && auditLogs.length === 0 && (
-                <div className="py-8 text-center text-xs text-muted-foreground">
-                  No previous status transitions recorded for this enquiry.
-                </div>
-              )}
-
-              {!loadingAudit && auditLogs.length > 0 && (
-                <div className="space-y-4">
-                  {auditLogs.map((log) => (
-                    <div key={log.id} className="flex items-start gap-3.5 text-xs border-b border-border/50 pb-3.5 last:border-0 last:pb-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-primary mt-1 shrink-0 ring-4 ring-primary/10" />
-                      <div className="flex-1 space-y-1.5">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <span className="font-medium text-foreground">
-                            Status changed: <span className="font-mono text-muted-foreground">{log.previousStatus || 'new'}</span>{' '}
-                            <ArrowRight size={11} className="inline mx-1 text-muted-foreground" />{' '}
-                            <span className="font-semibold text-primary">{log.newStatus}</span>
-                          </span>
-                          <span className="text-[11px] text-muted-foreground font-mono">
-                            {log.changedAt ? new Date(log.changedAt).toLocaleString() : ''}
-                          </span>
-                        </div>
-                        {log.changeReason && (
-                          <div className="text-xs text-muted-foreground bg-surface-2 p-2 rounded border border-border/60">
-                            <span className="font-semibold text-foreground">Reason:</span> &ldquo;{log.changeReason}&rdquo;
-                          </div>
-                        )}
-                        {log.changedBy && (
-                          <div className="text-[11px] text-muted-foreground">
-                            Admin: <span className="font-mono text-foreground font-medium">{typeof log.changedBy === 'object' ? log.changedBy?.email || log.changedBy?.id : log.changedBy}</span>
-                          </div>
-                        )}
-                      </div>
+            <div className="wf-cardhead">
+              <h3><History size={18} />Status History</h3>
+              <Button variant="ghost" size="xs" onClick={loadAuditHistory} disabled={loadingAudit}>
+                {loadingAudit ? <Spinner size={14} /> : 'Refresh'}
+              </Button>
+            </div>
+            {loadingAudit && <div className="wf-empty">Loading history…</div>}
+            {auditError && <div className="wf-empty">{auditError}</div>}
+            {!loadingAudit && !auditError && auditLogs.length === 0 && (
+              <div className="wf-empty">No status changes recorded yet.</div>
+            )}
+            {!loadingAudit && auditLogs.length > 0 && (
+              <ol className="wf-timeline">
+                {auditLogs.map((log) => (
+                  <li key={log.id}>
+                    <div className="wf-tl-top">
+                      <span className="wf-tl-change">
+                        <span className="wf-tl-from">{getStudentStatusLabel(log.previousStatus || 'new')}</span>
+                        <ArrowRight size={13} />
+                        <span className="wf-tl-to">{getStudentStatusLabel(log.newStatus)}</span>
+                      </span>
+                      <span className="wf-tl-time">{log.changedAt ? new Date(log.changedAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardBody>
+                    {log.changeReason && <div className="wf-tl-reason">{log.changeReason}</div>}
+                    {log.changedBy && (
+                      <div className="wf-tl-by">by {typeof log.changedBy === 'object' ? log.changedBy?.email || 'Admin' : 'Admin'}</div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
           </Card>
         </div>
 
@@ -527,18 +476,26 @@ export default function StudentEnquiryDetail() {
                 </label>
                 <select
                   value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Test scheduling and allocation hand-off need extra details: use the modal.
+                    if (value === 'test' || value === 'converted') {
+                      setStatusAction({ target: value })
+                      return
+                    }
+                    setSelectedStatus(value)
+                  }}
                   disabled={saving}
                   className="field__control-select w-full"
                 >
-                  {STUDENT_ENQUIRY_STATUSES.map((st) => (
+                  {getStudentStatusOptions(data.enquiryStatus || 'new').map((st) => (
                     <option key={st.value} value={st.value}>
                       {st.label}
                     </option>
                   ))}
                 </select>
                 <span className="text-[11px] text-muted-foreground block mt-1">
-                  Track allocation and student onboarding lifecycle.
+                  Talk to the parent, verify details, optional test, then send to allocation.
                 </span>
               </div>
 
@@ -609,7 +566,7 @@ export default function StudentEnquiryDetail() {
               >
                 {saving ? (
                   <>
-                    <Loader2 size={16} className="animate-spin mr-1.5" /> Saving Changes...
+                    <Spinner size={16} className="mr-1.5" /> Saving Changes...
                   </>
                 ) : (
                   <>
@@ -643,6 +600,51 @@ export default function StudentEnquiryDetail() {
           </Card>
         </div>
       </div>
+
+      {statusAction && (
+        <StudentStatusModal
+          enquiry={data}
+          targetStatus={statusAction.target}
+          onClose={() => setStatusAction(null)}
+          onDone={handleActionDone}
+        />
+      )}
     </div>
+  )
+}
+
+const FLOW_STEPS = [
+  { key: 'new', label: 'New' },
+  { key: 'contacted', label: 'Contacted' },
+  { key: 'in_progress', label: 'Verified' },
+  { key: 'test', label: 'Test', optional: true },
+  { key: 'converted', label: 'Allocation' },
+  { key: 'allocated', label: 'Allocated' },
+]
+
+/** Lifecycle: New, Contacted, Verified, optional Test, Allocation, Allocated. */
+function EnquiryFlow({ status, hadTest }) {
+  if (status === 'closed') {
+    return <Alert variant="warning" title="Enquiry closed">This enquiry is closed. Reopen it from the management panel to continue the flow.</Alert>
+  }
+  const currentIdx = FLOW_STEPS.findIndex((st) => st.key === status)
+  return (
+    <ol className="wf-flow" aria-label="Enquiry progress">
+      {FLOW_STEPS.map((st, i) => {
+        const skipped = st.optional && i < currentIdx && !hadTest
+        const done = i < currentIdx && !skipped
+        const active = i === currentIdx
+        return (
+          <li key={st.key}>
+            <span className={`wf-step${active ? ' is-active' : done ? ' is-done' : ''}`}>
+              {done && <Check size={12} />}
+              {st.label}
+              {st.optional && <em>{skipped ? '(skipped)' : '(optional)'}</em>}
+            </span>
+            {i < FLOW_STEPS.length - 1 && <ArrowRight size={13} className="wf-step-sep" />}
+          </li>
+        )
+      })}
+    </ol>
   )
 }

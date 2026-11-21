@@ -6,15 +6,17 @@ const configuredBaseUrl = (
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || ''
 ).replace(/\/+$/, '');
 
-// In development, when frontend is served from browser (e.g. localhost:5173),
-// route /api requests through Vite's dev server proxy to prevent browser CORS blocks.
+// In development (DEV mode + no non-localhost VITE_API_BASE_URL), route /api requests
+// through Vite's proxy so the browser does not get blocked by CORS.
+// In production build, VITE_API_BASE_URL must be set to the full backend URL
+// (e.g. https://api.wellfindacademic.com).
 export const API_BASE_URL = (
   typeof window !== 'undefined' &&
   import.meta.env?.DEV &&
   (!configuredBaseUrl || configuredBaseUrl.includes('localhost') || configuredBaseUrl.includes('127.0.0.1'))
 )
   ? ''
-  : (configuredBaseUrl || 'http://localhost:3005');
+  : (configuredBaseUrl || '');
 
 const TOKEN_KEY = 'wellfind_admin_token';
 const USER_KEY = 'wellfind_admin_user';

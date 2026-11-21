@@ -17,6 +17,7 @@ function normalizeTeacherDoc(doc) {
     email: doc.email || '',
     mobile: doc.mobile || doc.mobileNumber || '',
     avatar: doc.avatar || null,
+    gender: doc.gender || null,
     primarySubject: doc.primarySubject || 'General',
     qualification: doc.qualification || doc.highestQualification || '—',
     experienceYears: Number(doc.experienceYears) || 0,

@@ -1,14 +1,12 @@
+import { Alert } from '@/components/ui/Alert'
+import { PageLoader, Spinner } from '@/components/ui/Loaders'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   Card, CardHeader, CardBody,
   Button, Badge
 } from '@/components/ui'
-import {
-  ArrowLeft, ChevronLeft, User, Phone, Mail, MapPin, Clock, DollarSign,
-  BookOpen, Calendar, Shield, AlertCircle, CheckCircle2,
-  GraduationCap, School, Edit, Save, X, Loader2, Check
-} from 'lucide-react'
+import { ArrowLeft, ChevronLeft, User, Phone, Mail, MapPin, Clock, DollarSign, BookOpen, Calendar, Shield, AlertCircle, GraduationCap, School, Edit, Save, X, Check } from 'lucide-react'
 import { getStudentById, updateStudent } from '@/services/studentService'
 import { StudentStatusBadge } from './StudentStatusBadge'
 import { STUDENT_STATUS_CONFIG, CLASS_OPTIONS, LOCALITY_OPTIONS } from './studentsSampleData'
@@ -170,10 +168,7 @@ export default function StudentDetail() {
 
   if (loading) {
     return (
-      <div className="page__section py-16 flex flex-col items-center justify-center min-h-[50vh] gap-3">
-        <Loader2 className="animate-spin text-primary" size={32} />
-        <div className="text-sm font-medium text-muted-foreground">Loading student profile details...</div>
-      </div>
+      <PageLoader label="Loading student profile details" />
     )
   }
 
@@ -190,7 +185,7 @@ export default function StudentDetail() {
               {error || `Student #${id} could not be retrieved from active records.`}
             </p>
             <div className="flex items-center gap-3 mt-2">
-              <Button variant="outline" onClick={() => navigate('/students')}>
+              <Button variant="outline" onClick={() => navigate('/admin/students')}>
                 <ArrowLeft size={16} /> Back to Students
               </Button>
               <Button variant="primary" onClick={loadStudent}>
@@ -212,7 +207,7 @@ export default function StudentDetail() {
         <div className="page__headline">
           <nav className="breadcrumb mb-2">
             <span className="breadcrumb__item">
-              <Link to="/students" className="hover:text-primary transition-colors flex items-center gap-1.5">
+              <Link to="/admin/students" className="hover:text-primary transition-colors flex items-center gap-1.5">
                 <ChevronLeft size={14} /> Students
               </Link>
             </span>
@@ -238,7 +233,7 @@ export default function StudentDetail() {
         <div className="page__action flex items-center gap-2">
           {!isEditing ? (
             <>
-              <Button variant="outline" size="sm" onClick={() => navigate('/students')}>
+              <Button variant="outline" size="sm" onClick={() => navigate('/admin/students')}>
                 <ChevronLeft size={16} className="mr-1" /> Back to Students
               </Button>
               <Button variant="primary" size="sm" onClick={() => setIsEditing(true)}>
@@ -253,7 +248,7 @@ export default function StudentDetail() {
               <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
                 {saving ? (
                   <>
-                    <Loader2 size={16} className="animate-spin mr-1.5" /> Saving...
+                    <Spinner size={16} className="mr-1.5" /> Saving...
                   </>
                 ) : (
                   <>
@@ -268,27 +263,11 @@ export default function StudentDetail() {
 
       {/* Success / Error Alerts */}
       {saveSuccess && (
-        <div className="p-3 mb-6 rounded-lg bg-success/10 border border-success/20 text-success text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
-            <span>{saveSuccess}</span>
-          </div>
-          <button type="button" onClick={() => setSaveSuccess('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="success" title={saveSuccess} onClose={() => setSaveSuccess('')} />
       )}
 
       {saveError && (
-        <div className="p-3 mb-6 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <AlertCircle size={16} />
-            <span>{saveError}</span>
-          </div>
-          <button type="button" onClick={() => setSaveError('')} className="text-xs opacity-70 hover:opacity-100">
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="error" title={saveError} onClose={() => setSaveError('')} />
       )}
 
       {/* Main Grid: 2/3 Content + 1/3 Sidebar Layout */}
@@ -711,7 +690,7 @@ export default function StudentDetail() {
                   >
                     {saving ? (
                       <>
-                        <Loader2 size={16} className="animate-spin mr-1.5" /> Saving Changes...
+                        <Spinner size={16} className="mr-1.5" /> Saving Changes...
                       </>
                     ) : (
                       <>

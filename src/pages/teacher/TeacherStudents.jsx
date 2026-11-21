@@ -1,73 +1,90 @@
 import { useState } from 'react'
-import { RefreshCw } from 'lucide-react'
-import { Button, Card, CardBody } from '@/components/ui'
-import { respondToAllocation } from '@/services/teacherPortalService'
-import { Modal, Notice, Pager, StatusBadge, FormRow } from '@/pages/admin/adminUi'
-import { inputCls, useLoad } from '@/pages/admin/useLoad'
+import { useNavigate } from 'react-router-dom'
+import { CheckCircle2, Clock, GraduationCap, RefreshCw, Users } from 'lucide-react'
+import { Button, Card } from '@/components/ui'
+import { TableLoader } from '@/components/ui/Loaders'
+import { PersonAvatar } from '@/components/ui/PersonAvatar'
+import { Notice, Pager, StatusBadge } from '@/pages/admin/adminUi'
+import { useLoad } from '@/pages/admin/useLoad'
+import { Stat } from '@/pages/payouts/payoutShared'
 import { listMyAllocations } from '@/services/teacherPortalService'
-import { durationBetween, endedAt, formatDate } from './teacherPortalUtils'
+import { RespondModal } from './RespondModal'
+import { formatDate } from './teacherPortalUtils'
 
-const FILTERS = ['all', 'assigned', 'accepted', 'active', 'completed', 'rejected', 'cancelled']
+const FILTERS = [['all', 'All'], ['assigned', 'New requests'], ['accepted', 'Accepted'], ['active', 'Active'], ['completed', 'Completed'], ['rejected', 'Rejected']]
 
 export default function TeacherStudents() {
+  const navigate = useNavigate()
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
   const [msg, setMsg] = useState({ error: '', success: '' })
-  const [respond, setRespond] = useState(null) // {row, status}
-  const [detail, setDetail] = useState(null)
+  const [respond, setRespond] = useState(null) // { row, status }
 
-  const { data, loading, error, reload } = useLoad(
-    () => listMyAllocations({ page, limit: 10, status, sort: '-allocatedAt' }),
-    [page, status],
-  )
+  const { data, loading, error, reload } = useLoad(() => listMyAllocations({ page, limit: 10, status, sort: '-allocatedAt' }), [page, status])
+  const all = useLoad(() => listMyAllocations({ limit: 100, sort: '-allocatedAt' }), [])
   const rows = data?.docs || []
+  const every = all.data?.docs || []
+  const count = (...s) => every.filter((a) => s.includes(a.status)).length
 
   return (
     <div className="page__section">
       <header className="page__header">
         <div className="page__headline">
           <h1 className="page__title">My Students</h1>
-          <p className="page__description">Students allocated to you by Wellfind admin. Accept or reject new allocations.</p>
+          <p className="page__description">Students Wellfind has allocated to you. Open a student to see what to teach, the timetable, classes, assignments and test report.</p>
         </div>
-        <div className="page__action"><Button variant="outline" onClick={reload}><RefreshCw size={16} className="mr-2" />Refresh</Button></div>
+        <div className="page__action"><Button variant="outline" onClick={() => { reload(); all.reload() }}><RefreshCw size={16} style={{ marginRight: 8 }} />Refresh</Button></div>
       </header>
 
       <Notice {...msg} onClose={() => setMsg({ error: '', success: '' })} />
 
+      <div className="wf-stat-grid">
+        <Stat icon={Users} label="All students" value={all.loading ? '…' : every.length} note="Ever allocated to you" tone="info" />
+        <Stat icon={Clock} label="New requests" value={all.loading ? '…' : count('assigned')} note="Accept or reject" tone="warning" />
+        <Stat icon={CheckCircle2} label="Teaching now" value={all.loading ? '…' : count('accepted', 'active')} note="Accepted or active" tone="success" />
+        <Stat icon={GraduationCap} label="Completed" value={all.loading ? '…' : count('completed')} note="Finished" />
+      </div>
+
       <Card>
-        <CardBody className="p-4">
-          <select className={inputCls} style={{ width: 200 }} value={status} onChange={(e) => { setPage(1); setStatus(e.target.value) }} aria-label="Filter by status">
-            {FILTERS.map((f) => <option key={f} value={f}>{f === 'all' ? 'All statuses' : f}</option>)}
-          </select>
-        </CardBody>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="wf-sectionhead" style={{ flexWrap: 'wrap' }}>
+          <div className="wf-tabsbar" role="tablist" aria-label="Filter by status">
+            {FILTERS.map(([k, l]) => (
+              <button key={k} type="button" role="tab" aria-selected={status === k} className={status === k ? 'is-on' : ''} onClick={() => { setPage(1); setStatus(k) }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <div className="wf-table-wrap">
+          <table className="wf-table wf-table--click">
             <thead>
-              <tr className="text-left text-muted-foreground border-y border-border">
-                <th className="px-5 py-3">Student</th><th className="px-5 py-3">Subject</th>
-                <th className="px-5 py-3">Timing</th><th className="px-5 py-3">Status</th>
-                <th className="px-5 py-3">Since</th><th className="px-5 py-3 text-right">Actions</th>
-              </tr>
+              <tr><th>Student</th><th>Subject</th><th>Preferred timing</th><th>Status</th><th>Since</th><th className="num">Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">Loading…</td></tr>}
-              {!loading && error && <tr><td colSpan={6} className="px-5 py-8 text-center text-danger">{error}</td></tr>}
-              {!loading && !error && rows.length === 0 && <tr><td colSpan={6} className="px-5 py-8 text-center text-muted-foreground">No students found.</td></tr>}
+              {loading && <tr><td colSpan={6} style={{ padding: 0 }}><TableLoader columns={6} /></td></tr>}
+              {!loading && error && <tr><td colSpan={6} className="wf-state is-error">{error}</td></tr>}
+              {!loading && !error && rows.length === 0 && (
+                <tr><td colSpan={6} className="wf-state">{status === 'all' ? 'No students have been allocated to you yet. They will appear here as soon as Wellfind allocates one.' : 'No students in this list.'}</td></tr>
+              )}
               {!loading && rows.map((a) => (
-                <tr key={a.id} className="border-b border-border">
-                  <td className="px-5 py-3 font-medium">{a.student?.name}<div className="text-xs text-muted-foreground">{a.student?.studentClass} · {a.student?.locality}</div></td>
-                  <td className="px-5 py-3">{a.subject}</td>
-                  <td className="px-5 py-3">{a.student?.preferredTiming || '—'}</td>
-                  <td className="px-5 py-3"><StatusBadge status={a.status} /></td>
-                  <td className="px-5 py-3">{formatDate(a.allocatedAt)}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex gap-1.5 justify-end">
-                      <Button size="sm" variant="outline" onClick={() => setDetail(a)}>Details</Button>
-                      {a.status === 'assigned' && (
+                <tr key={a.id} tabIndex={0} onClick={() => navigate(`/teacher/students/${a.id}`)} onKeyDown={(e) => e.key === 'Enter' && navigate(`/teacher/students/${a.id}`)}>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <PersonAvatar name={a.student?.name} gender={a.student?.gender} role="student" size={40} />
+                      <div><div className="wf-cell-title">{a.student?.name}</div><div className="wf-cell-sub">{a.student?.studentClass} · {a.student?.locality}</div></div>
+                    </div>
+                  </td>
+                  <td>{a.subject}</td>
+                  <td>{a.student?.preferredTiming || '—'}</td>
+                  <td><StatusBadge status={a.status} /></td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(a.allocatedAt)}</td>
+                  <td>
+                    <div className="wf-actions" style={{ justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+                      {a.status === 'assigned' ? (
                         <>
                           <Button size="sm" variant="success" onClick={() => setRespond({ row: a, status: 'accepted' })}>Accept</Button>
                           <Button size="sm" variant="danger" onClick={() => setRespond({ row: a, status: 'rejected' })}>Reject</Button>
                         </>
+                      ) : (
+                        <Button size="sm" variant="outline" onClick={() => navigate(`/teacher/students/${a.id}`)}>Open</Button>
                       )}
                     </div>
                   </td>
@@ -83,70 +100,9 @@ export default function TeacherStudents() {
         <RespondModal
           {...respond}
           onClose={() => setRespond(null)}
-          onDone={(text) => { setRespond(null); setMsg({ error: '', success: text }); reload() }}
+          onDone={(text) => { setRespond(null); setMsg({ error: '', success: text }); reload(); all.reload() }}
         />
       )}
-      {detail && <DetailModal row={detail} onClose={() => setDetail(null)} />}
     </div>
-  )
-}
-
-function RespondModal({ row, status, onClose, onDone }) {
-  const [reason, setReason] = useState('')
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
-  const submit = async (e) => {
-    e.preventDefault()
-    setSaving(true)
-    setError('')
-    try {
-      await respondToAllocation(row.id, status, reason.trim())
-      onDone(`Allocation ${status}.`)
-    } catch (err) {
-      setError(err.message)
-      setSaving(false)
-    }
-  }
-  return (
-    <Modal title={`${status === 'accepted' ? 'Accept' : 'Reject'} allocation`} description={`${row.student?.name} · ${row.subject}`} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        <Notice error={error} />
-        <FormRow label={status === 'rejected' ? 'Reason (recommended)' : 'Note (optional)'}>
-          <textarea className={inputCls} rows={3} maxLength={2000} value={reason} onChange={(e) => setReason(e.target.value)} />
-        </FormRow>
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant={status === 'accepted' ? 'success' : 'danger'} loading={saving}>Confirm {status === 'accepted' ? 'accept' : 'reject'}</Button>
-        </div>
-      </form>
-    </Modal>
-  )
-}
-
-function DetailModal({ row, onClose }) {
-  const history = Array.isArray(row.statusHistory) ? row.statusHistory : []
-  const end = endedAt(row)
-  return (
-    <Modal wide title={row.student?.name || 'Student'} description={`${row.subject} · ${row.student?.studentClass || ''}`} onClose={onClose}>
-      <div className="grid sm:grid-cols-2 gap-3 text-sm">
-        <div><span className="text-muted-foreground">Locality</span><div className="font-medium">{row.student?.locality || '—'}</div></div>
-        <div><span className="text-muted-foreground">Preferred timing</span><div className="font-medium">{row.student?.preferredTiming || '—'}</div></div>
-        <div><span className="text-muted-foreground">Subjects</span><div className="font-medium">{(row.student?.subjects || []).join(', ') || '—'}</div></div>
-        <div><span className="text-muted-foreground">Duration</span><div className="font-medium">{durationBetween(row.allocatedAt, end || new Date())}{end ? '' : ' (ongoing)'}</div></div>
-      </div>
-      {row.allocationNotes && <p className="text-sm"><span className="text-muted-foreground">Admin notes:</span> {row.allocationNotes}</p>}
-      <div>
-        <h3 className="text-sm font-semibold mb-2">History</h3>
-        <ul className="space-y-2 text-sm">
-          <li className="rounded-md border border-border px-3 py-2">Allocated · <span className="text-muted-foreground">{formatDate(row.allocatedAt)}</span></li>
-          {history.map((h, i) => (
-            <li key={i} className="rounded-md border border-border px-3 py-2">
-              <StatusBadge status={h.toStatus} /> <span className="text-muted-foreground">{formatDate(h.changedAt)}</span>
-              {h.reason && <div className="mt-1">{h.reason}</div>}
-            </li>
-          ))}
-        </ul>
-      </div>
-    </Modal>
   )
 }

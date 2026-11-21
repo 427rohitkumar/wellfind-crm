@@ -1,6 +1,7 @@
+import { TableLoader } from '@/components/ui/Loaders'
 import { useCallback, useState } from 'react'
 import { KeyRound, Plus, RefreshCw, Search, Trash2 } from 'lucide-react'
-import { Button, Card, CardBody } from '@/components/ui'
+import { Button, Card } from '@/components/ui'
 import {
   USER_ROLES, USER_STATUSES, blockUser, createUser, deleteUser, docsOf, fmtDateTime,
   listUsers, reactivateUser, resetUserPassword, suspendUser, unblockUser, updateUser,
@@ -8,6 +9,7 @@ import {
 import { getAuthUser } from '@/services/apiClient'
 import { FormRow, Modal, Notice, Pager, StatusBadge } from './adminUi'
 import { inputCls, useLoad } from './useLoad'
+import { ROLE_LABELS, ROLE_SUMMARY, STAFF_ROLES } from '@/services/roles'
 
 export default function Users() {
   const me = getAuthUser()
@@ -60,59 +62,55 @@ export default function Users() {
           <h1 className="page__title">User Management</h1>
           <p className="page__description">Create admin/teacher accounts, block or suspend access, reset passwords.</p>
         </div>
-        <div className="page__action flex gap-2">
-          <Button variant="outline" onClick={reload}><RefreshCw size={16} className="mr-2" />Refresh</Button>
-          <Button onClick={() => setModal({ type: 'create' })}><Plus size={16} className="mr-2" />New user</Button>
+        <div className="page__action">
+          <Button variant="outline" onClick={reload}><RefreshCw size={16} style={{ marginRight: 8 }} />Refresh</Button>
+          <Button onClick={() => setModal({ type: 'create' })}><Plus size={16} style={{ marginRight: 8 }} />New user</Button>
         </div>
       </header>
 
       <Notice {...msg} onClose={() => setMsg({ error: '', success: '' })} />
 
       <Card>
-        <CardBody className="p-4 flex flex-wrap gap-3 items-end">
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(search.trim()) }}
-          >
-            <input className={inputCls} placeholder="Search by email" value={search} onChange={(e) => setSearch(e.target.value)} />
-            <Button type="submit" variant="outline"><Search size={16} /></Button>
-          </form>
-          <select className={inputCls} style={{ width: 160 }} value={role} onChange={(e) => { setPage(1); setRole(e.target.value) }}>
-            <option value="all">All roles</option>
-            {USER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <select className={inputCls} style={{ width: 160 }} value={status} onChange={(e) => { setPage(1); setStatus(e.target.value) }}>
-            <option value="all">All statuses</option>
-            {USER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </CardBody>
+        <div className="wf-sectionhead" style={{ flexWrap: 'wrap' }}>
+          <div><h3>Accounts</h3><p>{data ? `${data.totalDocs} total` : 'Loading…'}</p></div>
+          <div className="wf-filterbar">
+            <form className="wf-searchbox" onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(search.trim()) }}>
+              <Search size={14} />
+              <input className={inputCls} placeholder="Search by email" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </form>
+            <select className={inputCls} style={{ width: 150 }} value={role} onChange={(e) => { setPage(1); setRole(e.target.value) }} aria-label="Role">
+              <option value="all">All roles</option>
+              {USER_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r] || r}</option>)}
+            </select>
+            <select className={inputCls} style={{ width: 150 }} value={status} onChange={(e) => { setPage(1); setStatus(e.target.value) }} aria-label="Status">
+              <option value="all">All statuses</option>
+              {USER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+        <div className="wf-table-wrap">
+          <table className="wf-table">
             <thead>
-              <tr className="text-left text-muted-foreground border-y border-border">
-                <th className="px-5 py-3">Email</th><th className="px-5 py-3">Role</th>
-                <th className="px-5 py-3">Status</th><th className="px-5 py-3">Created</th>
-                <th className="px-5 py-3 text-right">Actions</th>
-              </tr>
+              <tr><th>Email</th><th>Role</th><th>Status</th><th>Created</th><th className="num">Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">Loading…</td></tr>}
-              {!loading && error && <tr><td colSpan={5} className="px-5 py-8 text-center text-danger">{error}</td></tr>}
+              {loading && <tr><td colSpan={5} style={{ padding: 0 }}><TableLoader columns={5} /></td></tr>}
+              {!loading && error && <tr><td colSpan={5} className="wf-state is-error">{error}</td></tr>}
               {!loading && !error && users.length === 0 && (
-                <tr><td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">No users found.</td></tr>
+                <tr><td colSpan={5} className="wf-state">No users found.</td></tr>
               )}
               {!loading && users.map((u) => {
                 const self = me && String(me.id) === String(u.id)
                 const busy = busyId === u.id
                 return (
-                  <tr key={u.id} className="border-b border-border">
-                    <td className="px-5 py-3 font-medium">{u.email}{self && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}</td>
-                    <td className="px-5 py-3">{u.role}</td>
-                    <td className="px-5 py-3"><StatusBadge status={u.status} /></td>
-                    <td className="px-5 py-3">{fmtDateTime(u.createdAt)}</td>
-                    <td className="px-5 py-3">
-                      <div className="flex gap-1.5 justify-end flex-wrap">
+                  <tr key={u.id}>
+                    <td className="wf-cell-title">{u.email}{self && <span className="wf-chip" style={{ marginLeft: 8 }}>you</span>}</td>
+                    <td><span className={`wf-chip${u.role === 'teacher' ? '' : ' wf-chip--staff'}`}>{ROLE_LABELS[u.role] || u.role}</span></td>
+                    <td><StatusBadge status={u.status} /></td>
+                    <td style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(u.createdAt)}</td>
+                    <td>
+                      <div className="wf-actions" style={{ justifyContent: 'flex-end' }}>
                         <Button size="sm" variant="outline" disabled={busy} onClick={() => setModal({ type: 'edit', user: u })}>Edit</Button>
                         {!self && u.status === 'active' && (
                           <>
@@ -139,6 +137,15 @@ export default function Users() {
         <Pager data={data} page={page} onPage={setPage} />
       </Card>
 
+      <Card>
+        <div className="wf-sectionhead"><div><h3>Roles &amp; access</h3><p>What each staff role can open. Create an account with the role that matches the person&apos;s job.</p></div></div>
+        <div className="wf-rolelist">
+          {['super_admin', ...STAFF_ROLES].map((r) => (
+            <div key={r}><b>{ROLE_LABELS[r]}</b><span>{ROLE_SUMMARY[r]}</span></div>
+          ))}
+        </div>
+      </Card>
+
       {(modal?.type === 'create' || modal?.type === 'edit') && (
         <UserForm
           user={modal.user}
@@ -150,13 +157,13 @@ export default function Users() {
         <Modal title="Temporary password" description={modal.user.email} onClose={() => setModal(null)}>
           {modal.password ? (
             <>
-              <p className="text-sm">Shown only once. Share it securely with the user.</p>
-              <code className="block rounded-md bg-surface-2 border border-border px-3 py-2 text-base select-all">{modal.password}</code>
+              <p className="wf-muted">Shown only once. Share it securely with the user.</p>
+              <code className="wf-callout" style={{ fontSize: 16, userSelect: "all" }}>{modal.password}</code>
             </>
           ) : (
-            <p className="text-sm">Password reset completed. The server did not return a password value.</p>
+            <p className="wf-muted">Password reset completed. The server did not return a password value.</p>
           )}
-          <div className="flex justify-end"><Button onClick={() => setModal(null)}>Done</Button></div>
+          <div className="wf-formfoot"><Button onClick={() => setModal(null)}>Done</Button></div>
         </Modal>
       )}
     </div>
@@ -194,7 +201,7 @@ function UserForm({ user, onClose, onSaved }) {
 
   return (
     <Modal title={editing ? 'Edit user' : 'New user'} onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="wf-form">
         <Notice error={error} />
         <FormRow label="Email"><input required type="email" className={inputCls} value={form.email} onChange={set('email')} /></FormRow>
         {!editing && (
@@ -202,15 +209,22 @@ function UserForm({ user, onClose, onSaved }) {
             <input required type="password" minLength={8} className={inputCls} value={form.password} onChange={set('password')} autoComplete="new-password" />
           </FormRow>
         )}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="wf-grid-2">
           <FormRow label="Role">
-            <select className={inputCls} value={form.role} onChange={set('role')}>{USER_ROLES.map((r) => <option key={r}>{r}</option>)}</select>
+            <select className={inputCls} value={form.role} onChange={set('role')}>
+              <optgroup label="Admin side (CRM staff)">
+                <option value="super_admin">{ROLE_LABELS.super_admin}</option>
+                {STAFF_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </optgroup>
+              <optgroup label="Teacher portal"><option value="teacher">{ROLE_LABELS.teacher}</option></optgroup>
+            </select>
           </FormRow>
           <FormRow label="Status">
             <select className={inputCls} value={form.status} onChange={set('status')}>{USER_STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
           </FormRow>
         </div>
-        <div className="flex justify-end gap-2">
+        <div className="wf-callout"><b>{ROLE_LABELS[form.role] || form.role}</b><span>{ROLE_SUMMARY[form.role] || 'Signs in to the teacher portal.'}</span></div>
+        <div className="wf-formfoot">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
           <Button type="submit" loading={saving}>{editing ? 'Save' : 'Create'}</Button>
         </div>

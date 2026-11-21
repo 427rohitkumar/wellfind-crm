@@ -1,155 +1,121 @@
+import { PageLoader } from '@/components/ui/Loaders'
 import { Link } from 'react-router-dom'
-import { Award, BookOpen, CheckCircle, Clock, GraduationCap, IndianRupee, RefreshCw, UserCheck, Users } from 'lucide-react'
-import { Badge, Button, Card, CardBody, CardHeader } from '@/components/ui'
+import {
+  ArrowRight, CheckCircle2, ClipboardCheck, FileText, GraduationCap, IndianRupee, RefreshCw,
+  Upload, UserRound, Users,
+} from 'lucide-react'
+import { Button, Card } from '@/components/ui'
 import { useAuth } from '@/hooks/useAuth'
-import { Notice, StatusBadge } from '@/pages/admin/adminUi'
+import { Notice } from '@/pages/admin/adminUi'
 import { useLoad } from '@/pages/admin/useLoad'
-import HorizontalBars from './HorizontalBars'
-import { LIVE_STATUSES, countBy, formatDate, loadTeacherPortal } from './teacherPortalUtils'
+import { getMyApplication } from '@/services/teacherPortalService'
+import TeacherOverview from './TeacherOverview'
+import RegistrationRenewalCard from './RegistrationRenewalCard'
+import { buildSteps, progressPercent } from './teacherApplicationUtils'
 
-function Metric({ icon: Icon, label, value, note, tone = 'primary' }) {
+function nextAction(app) {
+  const docsDone = [app.documents.aadhaar, app.documents.qualification].filter((d) => d.uploaded).length
+  const fee = app.registrationFee.status
+  if (app.rejected) return { title: 'Application closed', text: 'Please contact the Wellfind team if you have any questions.', cta: null }
+  if (app.approved) return { title: 'You are approved', text: 'Your teacher profile is active. Check your students and fees from the shortcuts below.', cta: null }
+  if (['shortlisted', 'evaluation_completed'].includes(app.status) && fee === 'pending') {
+    return { title: 'Pay the registration fee', text: `You are shortlisted. Pay the ₹${Number(app.registrationFee.amount).toLocaleString('en-IN')} registration fee to move to approval.`, cta: { to: '/teacher/application', label: 'Go to payment' } }
+  }
+  if (fee === 'submitted') return { title: 'Payment is being verified', text: 'We received your payment details and will confirm shortly.', cta: { to: '/teacher/application', label: 'View status' } }
+  if (docsDone < 2) return { title: 'Upload your documents', text: `${docsDone} of 2 documents uploaded. Add your Aadhaar and degree certificate so we can verify your profile.`, cta: { to: '/teacher/application#documents', label: 'Upload documents' } }
+  return { title: 'Your application is under review', text: 'Our team is reviewing your profile. We will contact you with the next steps.', cta: { to: '/teacher/application', label: 'View status' } }
+}
+
+function Stat({ icon: Icon, label, value, note, tone = 'primary' }) {
   return (
-    <Card>
-      <CardBody className="p-5 flex items-center gap-4">
-        <div className={`w-12 h-12 rounded-lg bg-${tone}/10 text-${tone} flex items-center justify-center shrink-0`}>
-          <Icon className="w-6 h-6" />
-        </div>
-        <div>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</p>
-          <h3 className="text-2xl font-bold mt-1">{value}</h3>
-          {note && <p className="text-xs text-muted-foreground mt-0.5">{note}</p>}
-        </div>
-      </CardBody>
-    </Card>
+    <div className="wf-stat-card">
+      <span className={`wf-stat-card__icon is-${tone}`}><Icon size={20} /></span>
+      <div>
+        <small>{label}</small>
+        <b>{value}</b>
+        {note && <span>{note}</span>}
+      </div>
+    </div>
   )
 }
 
-/** Allocations per month for the last 6 months, oldest → newest. */
-function lastSixMonths(allocations) {
-  const now = new Date()
-  const buckets = {}
-  for (let i = 5; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-    buckets[d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })] = 0
-  }
-  allocations.forEach((a) => {
-    const d = new Date(a.allocatedAt)
-    if (Number.isNaN(d.getTime())) return
-    const key = d.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' })
-    if (key in buckets) buckets[key] += 1
-  })
-  return buckets
-}
-
+/** Teacher "Dashboard" tab: where the application stands, shortcuts and basic analytics. */
 export default function TeacherDashboard() {
   const { user } = useAuth()
-  const { data, loading, error, reload } = useLoad(loadTeacherPortal, [])
-  const profile = data?.profile
-  const allocations = data?.allocations || []
+  const { data: app, loading, error, reload } = useLoad(getMyApplication, [])
 
-  const live = allocations.filter((a) => LIVE_STATUSES.includes(a.status))
-  const pending = allocations.filter((a) => a.status === 'assigned')
-  const completed = allocations.filter((a) => a.status === 'completed')
-  const fee = profile?.registrationFee
-  const displayName = profile?.name || (user?.email ? user.email.split('@')[0] : 'Teacher')
+  if (loading && !app) {
+    return <PageLoader label="Loading your dashboard…" />
+  }
+
+  const name = app?.fullName || (user?.email ? user.email.split('@')[0] : 'Teacher')
+  const docsDone = app ? [app.documents.aadhaar, app.documents.qualification].filter((d) => d.uploaded).length : 0
+  const steps = app ? buildSteps(app) : []
+  const action = app ? nextAction(app) : null
+  const feeLabel = { pending: 'Pending', submitted: 'Verifying', paid: 'Paid', waived: 'Skipped' }[app?.registrationFee.status] || '—'
+  const stageNow = steps.find((s) => s.state === 'active')?.label || (app?.approved ? 'Approved' : '—')
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-xl bg-card border border-border shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-            <GraduationCap className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Welcome back, {displayName}</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {profile ? `${profile.primarySubject || 'Teacher'} · ${profile.locality || 'Wellfind Academic'}` : 'Wellfind Academic Teacher Portal'}
-            </p>
-          </div>
+    <div className="page__section">
+      <header className="page__header">
+        <div className="page__headline">
+          <h1 className="page__title">Welcome, {name}</h1>
+          <p className="page__description">{app ? `${app.primarySubject} · ${app.teachingLocality}` : 'Wellfind Academic Teacher Portal'}</p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          {profile && (
-            <Badge variant={profile.availabilityStatus === 'free' ? 'success' : 'warning'} className="px-3 py-1">
-              <CheckCircle className="w-4 h-4 mr-1.5 inline" />
-              {profile.availabilityStatus === 'free' ? 'Available for students' : 'Fully allocated'}
-            </Badge>
-          )}
-          <span className="text-xs px-2.5 py-1 rounded bg-muted text-muted-foreground font-mono">{user?.email}</span>
-          <Button size="sm" variant="outline" onClick={reload}><RefreshCw size={14} className="mr-1" />Refresh</Button>
+        <div className="page__action">
+          <Button variant="outline" onClick={reload}><RefreshCw size={16} style={{ marginRight: 8 }} />Refresh</Button>
         </div>
-      </div>
+      </header>
 
       <Notice error={error} />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Metric icon={Users} label="Allocated students" value={loading ? '…' : allocations.length} note="All time" tone="info" />
-        <Metric icon={UserCheck} label="Current students" value={loading ? '…' : live.length} note="Assigned, accepted or active" />
-        <Metric icon={Clock} label="Awaiting your response" value={loading ? '…' : pending.length} note="Accept or reject" tone="warning" />
-        <Metric
-          icon={IndianRupee}
-          label="Registration fee"
-          value={loading ? '…' : fee?.status ? fee.status.toUpperCase() : '—'}
-          note={fee?.year ? `Academic year ${fee.year}` : undefined}
-          tone={fee?.status === 'paid' || fee?.status === 'waived' ? 'success' : 'danger'}
-        />
-      </div>
+      {app && (
+        <>
+          <div className="wf-stat-grid">
+            <Stat icon={ClipboardCheck} label="Application stage" value={stageNow} note={app.approved ? 'All steps complete' : `${steps.filter((s) => s.state === 'done').length} of ${steps.length} steps done`} />
+            <Stat icon={CheckCircle2} label="Progress" value={`${progressPercent(app)}%`} note="Towards approval" tone="success" />
+            <Stat icon={FileText} label="Documents" value={`${docsDone} / 2`} note={docsDone === 2 ? 'All uploaded' : 'Upload pending'} tone="info" />
+            <Stat icon={IndianRupee} label="Registration fee" value={feeLabel} note={`₹${Number(app.registrationFee.amount).toLocaleString('en-IN')} per year`} tone={['paid', 'waived'].includes(app.registrationFee.status) ? 'success' : 'warning'} />
+          </div>
 
-      {pending.length > 0 && (
-        <Card className="border-warning/30">
-          <CardHeader className="border-b border-border py-3.5 px-5 flex items-center justify-between">
-            <h3 className="card__title">New allocations waiting for you</h3>
-            <Link to="/teacher/students" className="text-sm text-primary">Respond →</Link>
-          </CardHeader>
-          <CardBody className="p-5 text-sm space-y-2">
-            {pending.slice(0, 3).map((a) => (
-              <div key={a.id} className="flex flex-wrap justify-between gap-2">
-                <span className="font-medium">{a.student?.name} — {a.subject}</span>
-                <span className="text-muted-foreground">{a.student?.studentClass} · {a.student?.locality}</span>
+          <RegistrationRenewalCard app={app} onDone={reload} onSuccess={() => {}} onError={() => {}} />
+
+          <Card variant="hover">
+            <div className="wf-next">
+              <div>
+                <small>Next step</small>
+                <h3>{action.title}</h3>
+                <p>{action.text}</p>
+                <div className="wf-progressbar" aria-label={`Progress ${progressPercent(app)}%`}><span style={{ width: `${progressPercent(app)}%` }} /></div>
               </div>
-            ))}
-          </CardBody>
-        </Card>
-      )}
+              {action.cta && (
+                <Link to={action.cta.to} className="button button--primary">
+                  {action.cta.label}<ArrowRight size={16} style={{ marginLeft: 8 }} />
+                </Link>
+              )}
+            </div>
+          </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="border-b border-border py-3.5 px-5"><h3 className="card__title">Allocations by status</h3></CardHeader>
-          <CardBody className="p-5"><HorizontalBars data={countBy(allocations, (a) => a.status)} empty="No allocations yet." /></CardBody>
-        </Card>
-        <Card>
-          <CardHeader className="border-b border-border py-3.5 px-5"><h3 className="card__title">Subjects taught</h3></CardHeader>
-          <CardBody className="p-5"><HorizontalBars data={countBy(allocations, (a) => a.subject)} empty="No subjects yet." /></CardBody>
-        </Card>
-        <Card>
-          <CardHeader className="border-b border-border py-3.5 px-5"><h3 className="card__title">New allocations (6 months)</h3></CardHeader>
-          <CardBody className="p-5"><HorizontalBars data={lastSixMonths(allocations)} /></CardBody>
-        </Card>
-      </div>
+          <div>
+            <h3 className="wf-sectiontitle">Shortcuts</h3>
+            <div className="wf-shortcuts">
+              <Link to="/teacher/application" className="wf-shortcut"><ClipboardCheck size={20} /><b>Application status</b><span>Track every step</span></Link>
+              <Link to="/teacher/application#documents" className="wf-shortcut"><Upload size={20} /><b>Upload documents</b><span>{docsDone} of 2 uploaded</span></Link>
+              {app.payment.canPay && <Link to="/teacher/application" className="wf-shortcut is-hot"><IndianRupee size={20} /><b>Pay registration fee</b><span>Valid for 1 year</span></Link>}
+              {app.approved && <Link to="/teacher/students" className="wf-shortcut"><Users size={20} /><b>My students</b><span>Allocations and responses</span></Link>}
+              {app.approved && <Link to="/teacher/fees" className="wf-shortcut"><GraduationCap size={20} /><b>Fees &amp; history</b><span>Registration and payouts</span></Link>}
+              {app.approved && <Link to="/teacher/profile" className="wf-shortcut"><UserRound size={20} /><b>My profile</b><span>Your details</span></Link>}
+            </div>
+          </div>
 
-      <Card>
-        <CardHeader className="border-b border-border py-3.5 px-5 flex items-center justify-between">
-          <h3 className="card__title flex items-center gap-2"><BookOpen size={16} /> Recent allocations</h3>
-          <span className="text-xs text-muted-foreground"><Award size={12} className="inline mr-1" />{completed.length} completed</span>
-        </CardHeader>
-        <CardBody className="p-0">
-          {allocations.length === 0 && !loading ? (
-            <p className="p-5 text-sm text-muted-foreground">No students have been allocated to you yet.</p>
-          ) : (
-            <table className="w-full text-sm">
-              <tbody>
-                {allocations.slice(0, 5).map((a) => (
-                  <tr key={a.id} className="border-b border-border last:border-0">
-                    <td className="px-5 py-3 font-medium">{a.student?.name}</td>
-                    <td className="px-5 py-3">{a.subject}</td>
-                    <td className="px-5 py-3"><StatusBadge status={a.status} /></td>
-                    <td className="px-5 py-3 text-muted-foreground">{formatDate(a.allocatedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {app.approved && app.hasProfile && (
+            <div>
+              <h3 className="wf-sectiontitle">Teaching overview</h3>
+              <TeacherOverview hideHeader />
+            </div>
           )}
-        </CardBody>
-      </Card>
+        </>
+      )}
     </div>
   )
 }

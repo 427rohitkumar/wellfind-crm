@@ -1,3 +1,4 @@
+import { TableLoader, Spinner } from '@/components/ui/Loaders'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Table, TableHead, TableBody, TableRow, TableCell, TableHeaderCell,
@@ -5,9 +6,9 @@ import {
 } from '@/components/ui'
 import {
   Eye, Trash2, MapPin, Phone, Mail,
-  AlertCircle, GraduationCap, Briefcase, Loader2
+  AlertCircle, GraduationCap, Briefcase
 } from 'lucide-react'
-import { TEACHER_APPLICATION_STATUSES } from '@/services/teacherEnquiryService'
+import { getTeacherStatusOptions } from '@/services/teacherEnquiryService'
 import { useEnquiryCounts } from '@/context/EnquiryCountContext'
 
 export function TeacherInquiriesTab({
@@ -100,14 +101,7 @@ export function TeacherInquiriesTab({
       <TableBody>
         {loading && (
           <TableRow>
-            <TableCell colSpan={11} className="text-center py-12">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                <span className="text-sm text-muted-foreground font-medium">
-                  Loading teacher applications...
-                </span>
-              </div>
-            </TableCell>
+            <TableCell colSpan={11} style={{ padding: 0 }}><TableLoader columns={8} /></TableCell>
           </TableRow>
         )}
 
@@ -279,13 +273,13 @@ export function TeacherInquiriesTab({
                       title={`Current status: ${enquiry.applicationStatus || 'new'}. Change status.`}
                       aria-label={`Change status for teacher ${enquiry.id}`}
                     >
-                      {TEACHER_APPLICATION_STATUSES.map((statusItem) => (
+                      {getTeacherStatusOptions(enquiry.applicationStatus || 'new').map((statusItem) => (
                         <option key={statusItem.value} value={statusItem.value}>
                           {statusItem.label}
                         </option>
                       ))}
                     </select>
-                    {isUpdating && <Loader2 size={13} className="animate-spin text-primary shrink-0" />}
+                    {isUpdating && <Spinner size={14} />}
                   </div>
                 </TableCell>
 

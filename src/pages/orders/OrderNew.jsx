@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Card, CardHeader, CardBody, CardFooter,
   Button,
-  Input, Label, Field, Select,
+  Input, InputGroup, InputGroupText, Label, Field, Select,
   Badge,
   Avatar,
   Table, TableHead, TableBody, TableRow, TableCell, TableHeaderCell,

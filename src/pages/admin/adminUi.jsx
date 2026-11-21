@@ -1,27 +1,10 @@
-import { AlertCircle, CheckCircle2, X } from 'lucide-react'
+import { Alert } from '@/components/ui/Alert'
+import { X } from 'lucide-react'
 import { Badge } from '@/components/ui'
 
 export function Notice({ error, success, onClose }) {
   if (!error && !success) return null
-  const isErr = Boolean(error)
-  return (
-    <div
-      role={isErr ? 'alert' : 'status'}
-      className={`flex items-center justify-between gap-3 rounded-md border px-4 py-3 text-sm mb-4 ${
-        isErr ? 'border-danger/30 bg-danger/5 text-danger' : 'border-success/30 bg-success/5 text-success'
-      }`}
-    >
-      <span className="flex items-center gap-2">
-        {isErr ? <AlertCircle size={16} /> : <CheckCircle2 size={16} />}
-        {error || success}
-      </span>
-      {onClose && (
-        <button type="button" onClick={onClose} aria-label="Dismiss" className="opacity-70 hover:opacity-100">
-          <X size={14} />
-        </button>
-      )}
-    </div>
-  )
+  return <Alert variant={error ? 'error' : 'success'} title={error || success} onClose={onClose} className="mb-4" />
 }
 
 export function Modal({ title, description, onClose, children, wide = false }) {
@@ -47,7 +30,7 @@ export function Modal({ title, description, onClose, children, wide = false }) {
             <X size={18} />
           </button>
         </header>
-        <div className="p-5 space-y-4">{children}</div>
+        <div className="wf-modal-body">{children}</div>
       </section>
     </div>
   )
@@ -55,10 +38,10 @@ export function Modal({ title, description, onClose, children, wide = false }) {
 
 export function FormRow({ label, hint, children }) {
   return (
-    <label className="block text-sm">
-      <span className="block mb-1 font-medium">{label}</span>
+    <label className="wf-field">
+      <span className="wf-field__label">{label}</span>
       {children}
-      {hint && <span className="block mt-1 text-xs text-muted-foreground">{hint}</span>}
+      {hint && <span className="wf-field__hint">{hint}</span>}
     </label>
   )
 }
@@ -83,19 +66,12 @@ export function StatusBadge({ status }) {
 export function Pager({ data, page, onPage }) {
   if (!data || (data.totalPages || 1) <= 1) return null
   return (
-    <div className="flex items-center justify-between px-5 py-3 text-sm border-t border-border">
-      <span className="text-muted-foreground">
-        Page {data.page} of {data.totalPages} · {data.totalDocs} total
-      </span>
-      <div className="flex gap-2">
-        <button className="button button--outline button--sm" disabled={!data.hasPrevPage} onClick={() => onPage(page - 1)}>
-          Previous
-        </button>
-        <button className="button button--outline button--sm" disabled={!data.hasNextPage} onClick={() => onPage(page + 1)}>
-          Next
-        </button>
+    <div className="wf-pager">
+      <span>Page {data.page} of {data.totalPages} · {data.totalDocs} total</span>
+      <div className="wf-actions">
+        <button className="button button--outline button--sm" disabled={!data.hasPrevPage} onClick={() => onPage(page - 1)}>Previous</button>
+        <button className="button button--outline button--sm" disabled={!data.hasNextPage} onClick={() => onPage(page + 1)}>Next</button>
       </div>
     </div>
   )
 }
-

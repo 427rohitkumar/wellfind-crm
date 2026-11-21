@@ -1,13 +1,10 @@
+import { Alert } from '@/components/ui/Alert'
 import { useState, useEffect } from 'react'
 import {
   Dialog, DialogContent, DialogHeader, DialogBody, DialogFooter, DialogClose,
   Badge, Button
 } from '@/components/ui'
-import {
-  User, Phone, Mail, MapPin, Clock, DollarSign,
-  BookOpen, GraduationCap, Briefcase, FileText, Download,
-  AlertCircle, Edit, Shield
-} from 'lucide-react'
+import { User, Phone, Mail, MapPin, Clock, DollarSign, BookOpen, GraduationCap, Briefcase, FileText, Download, Edit, Shield } from 'lucide-react'
 import { getStudentEnquiryById, STUDENT_ENQUIRY_STATUSES } from '@/services/studentEnquiryService'
 import { getTeacherEnquiryById, TEACHER_APPLICATION_STATUSES, downloadTeacherDocument } from '@/services/teacherEnquiryService'
 import { useEnquiryCounts } from '@/context/EnquiryCountContext'
@@ -137,34 +134,7 @@ export function InquiryDetailModal({
           )}
 
           {error && (
-            <div
-              className="alert alert--danger"
-              role="alert"
-              style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.75rem',
-                padding: '0.875rem 1rem',
-                borderRadius: 'var(--radius-md, 0.5rem)',
-                backgroundColor: 'color-mix(in oklch, var(--color-danger) 10%, var(--color-surface, #fff))',
-                border: 'none',
-                color: 'var(--color-danger, #e52629)',
-              }}
-            >
-              <AlertCircle
-                className="shrink-0 mt-0.5"
-                style={{
-                  width: '20px',
-                  height: '20px',
-                  color: 'var(--color-danger, #e52629)',
-                }}
-                aria-hidden="true"
-              />
-              <div>
-                <p className="font-semibold text-sm">Error loading enquiry</p>
-                <p className="text-xs mt-0.5 opacity-90">{error}</p>
-              </div>
-            </div>
+            <Alert variant="error" title="Something needs your attention." />
           )}
 
           {!loading && !error && data && (

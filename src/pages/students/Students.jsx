@@ -1,3 +1,6 @@
+import { Alert } from '@/components/ui/Alert'
+import { usePermissions } from '@/hooks/usePermissions'
+import { TableLoader } from '@/components/ui/Loaders'
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
@@ -25,6 +28,12 @@ import { StudentDetailModal } from './StudentDetailModal'
 import { StudentEditModal } from './StudentEditModal'
 import { StudentDeleteModal } from './StudentDeleteModal'
 import { StudentAddModal } from './StudentAddModal'
+import { PersonAvatar } from '@/components/ui/PersonAvatar'
+import { Printer } from 'lucide-react'
+import { STUDENT_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
+
+const GENDER_LABEL = { male: 'Male', female: 'Female', other: 'Other' }
+const TEACHER_PREF_LABEL = { male: 'Male teacher', female: 'Female teacher', any: 'Any' }
 import {
   fetchStudents,
   updateStudent,
@@ -48,6 +57,8 @@ export default function Students() {
   const [detailModal, setDetailModal] = useState({ open: false, student: null })
   const [editModal, setEditModal] = useState({ open: false, student: null })
   const [deleteModal, setDeleteModal] = useState({ open: false, student: null })
+  const { can } = usePermissions()
+  const canWrite = (m) => can(m, 'write')
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [feedbackToast, setFeedbackToast] = useState(null)
   const [activeBanner, setActiveBanner] = useState(null)
@@ -296,62 +307,39 @@ export default function Students() {
     clearSelection()
   }
 
-  // Export CSV
+  // Table export / print: what is on screen (search, filters and sorting applied)
   const handleExportCSV = () => {
     if (sortedStudents.length === 0) {
-      setActiveBanner({
-        type: 'warning',
-        title: 'Export Skipped:',
-        message: 'No student records available to export.',
-      })
+      setActiveBanner({ type: 'warning', title: 'Export Skipped:', message: 'No student records available to export.' })
       return
     }
+    downloadCSV(`wellfind-students-${today()}.csv`, STUDENT_COLUMNS, sortedStudents)
+    setActiveBanner({ type: 'success', title: 'Export Complete:', message: `Exported ${sortedStudents.length} student records to CSV file.` })
+  }
 
-    const headers = [
-      'ID',
-      'Student Name',
-      'Parent Name',
-      'Phone',
-      'Email',
-      'Class',
-      'Subjects',
-      'Locality',
-      'Timing',
-      'Budget',
-      'Status',
-      'Assigned Tutor',
-      'Submitted Date',
-    ]
+  const handlePrint = () => {
+    if (sortedStudents.length === 0) {
+      setActiveBanner({ type: 'warning', title: 'Print Skipped:', message: 'No student records to print.' })
+      return
+    }
+    if (!printRows('Students', STUDENT_COLUMNS, sortedStudents)) {
+      setActiveBanner({ type: 'warning', title: 'Print blocked:', message: 'Allow pop-ups for this site to print.' })
+    }
+  }
 
-    const rows = sortedStudents.map((s) => [
-      `"${s.id || ''}"`,
-      `"${(s.name || '').replace(/"/g, '""')}"`,
-      `"${(s.parentName || '').replace(/"/g, '""')}"`,
-      `"${s.phone || ''}"`,
-      `"${s.email || ''}"`,
-      `"${(s.studentClass || '').replace(/"/g, '""')}"`,
-      `"${(Array.isArray(s.subjects) ? s.subjects.join(', ') : '').replace(/"/g, '""')}"`,
-      `"${(s.locality || '').replace(/"/g, '""')}"`,
-      `"${(s.preferredTiming || '').replace(/"/g, '""')}"`,
-      `"${(s.budgetRange || '').replace(/"/g, '""')}"`,
-      `"${s.status || ''}"`,
-      `"${(s.assignedTeacher || '').replace(/"/g, '""')}"`,
-      `"${s.submittedDate || ''}"`,
-    ])
-
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n')
-    const encodedUri = encodeURI(csvContent)
-    const link = document.createElement('a')
-    link.setAttribute('href', encodedUri)
-    link.setAttribute('download', `wellfind-students-${new Date().toISOString().slice(0, 10)}.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    setActiveBanner({
-      type: 'success',
-      title: 'Export Complete:',
-      message: `Exported ${sortedStudents.length} student records to CSV file.`,
-    })
+  // Top button: every student, ignoring search and filters
+  const [exportingAll, setExportingAll] = useState(false)
+  const handleExportAll = async () => {
+    setExportingAll(true)
+    try {
+      const all = await fetchAllPages((page) => fetchStudents({ page, limit: 100 }))
+      downloadCSV(`wellfind-all-students-${today()}.csv`, STUDENT_COLUMNS, all)
+      setActiveBanner({ type: 'success', title: 'Export Complete:', message: `Exported all ${all.length} students.` })
+    } catch (err) {
+      setActiveBanner({ type: 'warning', title: 'Export failed:', message: err.message || 'Could not export all students.' })
+    } finally {
+      setExportingAll(false)
+    }
   }
 
   // Clear filters
@@ -381,24 +369,7 @@ export default function Students() {
     <div className="page__section space-y-6">
       {/* Toast Feedback Notification */}
       {feedbackToast && (
-        <div
-          className={`fixed top-5 right-5 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg border text-sm transition-all animate-in fade-in duration-200 ${
-            feedbackToast.type === 'danger'
-              ? 'bg-surface text-danger border-danger/30'
-              : 'bg-surface text-foreground border-border'
-          }`}
-          role="alert"
-        >
-          <CheckCircle className="w-4 h-4 text-success shrink-0" />
-          <span>{feedbackToast.message}</span>
-          <button
-            type="button"
-            className="ms-3 text-muted-foreground hover:text-foreground"
-            onClick={() => setFeedbackToast(null)}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+        <div className="wf-toast"><Alert variant={feedbackToast.type === 'danger' ? 'error' : 'success'} title={feedbackToast.message} onClose={() => setFeedbackToast(null)} /></div>
       )}
 
       {/* Page Header matching Meridian layout */}
@@ -414,14 +385,16 @@ export default function Students() {
             <RefreshCw className={`w-4 h-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
             Sync
           </Button>
-          <Button variant="neutral" onClick={handleExportCSV}>
+          <Button variant="neutral" onClick={handleExportAll} disabled={exportingAll} title="Download every student as CSV, ignoring filters">
             <Download className="w-4 h-4 mr-1.5" aria-hidden="true" />
-            Export CSV
+            {exportingAll ? 'Exporting…' : 'Export all'}
           </Button>
+          {canWrite('students') && (
           <Button variant="primary" onClick={() => setAddModalOpen(true)}>
             <Plus className="w-4 h-4 mr-1.5" aria-hidden="true" />
             Add student
           </Button>
+          )}
         </div>
       </header>
 
@@ -560,9 +533,13 @@ export default function Students() {
               </p>
             </div>
             <div className="ms-auto flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleExportCSV}>
+              <Button variant="outline" size="sm" onClick={handleExportCSV} title="Download the students shown in this table">
                 <Download className="w-3.5 h-3.5 mr-1.5" />
                 Export CSV
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePrint} title="Print the students shown in this table">
+                <Printer className="w-3.5 h-3.5 mr-1.5" />
+                Print
               </Button>
             </div>
           </CardHeader>
@@ -617,13 +594,15 @@ export default function Students() {
                 <col style={{ width: '220px' }} />  {/* Student / Parent */}
                 <col style={{ width: '135px' }} />  {/* Phone Number */}
                 <col style={{ width: '130px' }} />  {/* Class */}
+                <col style={{ width: '100px' }} />  {/* Gender */}
+                <col style={{ width: '130px' }} />  {/* Teacher preference */}
                 <col style={{ width: '160px' }} />  {/* Subjects */}
                 <col style={{ width: '130px' }} />  {/* Locality */}
                 <col style={{ width: '150px' }} />  {/* Preferred Timing */}
                 <col style={{ width: '110px' }} />  {/* Budget Range */}
                 <col style={{ width: '110px' }} />  {/* Status */}
                 <col style={{ width: '115px' }} />  {/* Submitted Date */}
-                <col style={{ width: '104px' }} />  {/* Actions */}
+                <col style={{ width: '176px' }} />  {/* Actions */}
               </colgroup>
 
               <TableHead variant="alt">
@@ -656,6 +635,9 @@ export default function Students() {
                   >
                     Class
                   </TableHeaderCell>
+
+                  <TableHeaderCell scope="col">Gender</TableHeaderCell>
+                  <TableHeaderCell scope="col">Teacher wanted</TableHeaderCell>
 
                   {/* 4. Subjects */}
                   <TableHeaderCell scope="col">Subjects</TableHeaderCell>
@@ -708,16 +690,11 @@ export default function Students() {
               <TableBody>
                 {loading && studentsList.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="py-12 text-center text-muted-foreground">
-                      <div className="flex flex-col items-center justify-center gap-2">
-                        <RefreshCw className="w-6 h-6 animate-spin text-primary" />
-                        <span className="text-xs">Loading student records...</span>
-                      </div>
-                    </TableCell>
+                    <TableCell colSpan={13} style={{ padding: 0 }}><TableLoader columns={8} /></TableCell>
                   </TableRow>
                 ) : paginatedStudents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="table-empty-state-cell">
+                    <TableCell colSpan={13} className="table-empty-state-cell">
                       <div className="table-empty-state">
                         <GraduationCap className="table-empty-state__icon" aria-hidden="true" />
                         <h3 className="table-empty-state__title">No students found</h3>
@@ -753,35 +730,7 @@ export default function Students() {
                     {/* 1. Student / Parent Name */}
                     <TableCell>
                       <div className="flex items-center gap-2.5 min-w-0 teacher-profile">
-                        <div
-                          className="relative shrink-0 rounded-full overflow-hidden bg-neutral ring-1 ring-border avatar"
-                          style={{
-                            width: '36px',
-                            height: '36px',
-                            minWidth: '36px',
-                            minHeight: '36px',
-                          }}
-                        >
-                          {student.avatar ? (
-                            <img
-                              src={student.avatar}
-                              alt={student.name}
-                              className="w-full h-full object-cover block avatar__image"
-                              style={{
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover',
-                              }}
-                            />
-                          ) : (
-                            <div
-                              className="w-full h-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs"
-                              style={{ width: '100%', height: '100%' }}
-                            >
-                              {getInitials(student.name)}
-                            </div>
-                          )}
-                        </div>
+                        <PersonAvatar src={student.avatar} name={student.name} gender={student.gender} role="student" size={38} />
                         <div className="min-w-0 flex-1 teacher-info">
                           <Link
                             to={`/admin/students/${student.id}`}
@@ -793,9 +742,9 @@ export default function Students() {
                           </Link>
                           <div
                             className="text-xs text-muted-foreground truncate w-full mt-0.5 teacher-email"
-                            title={student.parentName ? `Parent: ${student.parentName}` : (student.email || '—')}
+                            title={student.parentName ? `Parent: ${student.parentName}` : `Teacher preference: ${TEACHER_PREF_LABEL[student.preferredTeacherGender] || 'Any'}`}
                           >
-                            {student.parentName ? `Parent: ${student.parentName}` : (student.email || '—')}
+                            {student.parentName ? `Parent: ${student.parentName}` : `Teacher: ${TEACHER_PREF_LABEL[student.preferredTeacherGender] || 'Any'}`}
                           </div>
                         </div>
                       </div>
@@ -818,6 +767,13 @@ export default function Students() {
                       <span className="badge badge--neutral text-xs font-medium">
                         {student.studentClass}
                       </span>
+                    </TableCell>
+
+                    <TableCell className="whitespace-nowrap">
+                      {GENDER_LABEL[student.gender] ? <span className="badge badge--neutral text-xs font-medium">{GENDER_LABEL[student.gender]}</span> : <span className="text-muted-foreground text-xs">—</span>}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      <span className="text-xs">{TEACHER_PREF_LABEL[student.preferredTeacherGender] || 'Any'}</span>
                     </TableCell>
 
                     {/* 4. Subjects */}
@@ -890,6 +846,15 @@ export default function Students() {
                         className="flex items-center justify-end gap-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {student.status === 'awaiting_allocation' && canWrite('allocation') && (
+                          <Link
+                            to={`/admin/allocation?enquiry=${student.id}`}
+                            className="button button--primary button--sm"
+                            title="Allocate a teacher to this student"
+                          >
+                            Allocate
+                          </Link>
+                        )}
                         <Link
                           to={`/admin/students/${student.id}`}
                           className="button button--ghost button--icon button--sm"
@@ -899,6 +864,7 @@ export default function Students() {
                         >
                           <Eye className="w-3.5 h-3.5" />
                         </Link>
+                        {canWrite('students') && (
                         <button
                           type="button"
                           className="button button--ghost button--icon button--sm text-danger hover:bg-danger/10"
@@ -908,6 +874,7 @@ export default function Students() {
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
