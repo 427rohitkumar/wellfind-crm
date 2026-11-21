@@ -14,6 +14,9 @@ function keyToBytes(base64) {
 }
 
 async function registration() {
+  if (navigator.serviceWorker.controller) {
+    return navigator.serviceWorker.ready
+  }
   return navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready)
 }
 
@@ -23,7 +26,7 @@ export async function getPushState() {
   if (Notification.permission === 'denied') return 'blocked'
   if (Notification.permission !== 'granted') return 'off'
   try {
-    const reg = await navigator.serviceWorker.getRegistration('/sw.js')
+    const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.ready)
     const sub = reg ? await reg.pushManager.getSubscription() : null
     return sub ? 'on' : 'off'
   } catch {
@@ -35,17 +38,36 @@ export async function enablePush() {
   if (!isPushSupported()) throw new Error('This browser does not support notifications.')
   const config = unwrap(await apiRequest('/api/push/config'))
   if (!config?.enabled || !config.publicKey) throw new Error('Notifications are not set up on the server yet.')
+  
   const permission = await Notification.requestPermission()
-  if (permission !== 'granted') throw new Error('Notifications are blocked. Allow them in your browser settings for this site.')
+  if (permission !== 'granted') throw new Error('Notifications are blocked. Please allow notifications in your browser or PWA app settings.')
+  
   const reg = await registration()
-  const existing = await reg.pushManager.getSubscription()
-  const sub = existing || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyToBytes(config.publicKey) }))
-  await apiRequest('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) })
+  let sub = await reg.pushManager.getSubscription()
+
+  if (sub) {
+    try {
+      await apiRequest('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) })
+      return 'on'
+    } catch {
+      await sub.unsubscribe().catch(() => {})
+      sub = null
+    }
+  }
+
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyToBytes(config.publicKey),
+    })
+    await apiRequest('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) })
+  }
+
   return 'on'
 }
 
 export async function disablePush() {
-  const reg = await navigator.serviceWorker.getRegistration('/sw.js')
+  const reg = (await navigator.serviceWorker.getRegistration()) || (await navigator.serviceWorker.ready)
   const sub = reg ? await reg.pushManager.getSubscription() : null
   if (sub) {
     await apiRequest('/api/push/unsubscribe', { method: 'POST', body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => undefined)

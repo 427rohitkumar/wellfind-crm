@@ -7,6 +7,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { getMyApplication } from '@/services/teacherPortalService';
 import { BarChart3, History, ClipboardCheck, ClipboardList, Mail, GitBranch, IndianRupee, LayoutDashboard, MessageSquare, ShieldCheck, UserRound, Users } from 'lucide-react';
 import { clsx } from 'clsx';
+import { InstallPwaButton } from './InstallPwaButton';
 
 function TeacherMenu() {
   const [approved, setApproved] = useState(false);
@@ -362,6 +363,7 @@ export function Sidebar() {
 
       <footer className="sidebar__footer">
         <ul className="sidebar__list" role="menubar">
+          <InstallPwaButton collapsed={isSidebarCollapsed} />
           <li className="sidebar__item" role="none">
             <button
               type="button"

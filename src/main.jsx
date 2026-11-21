@@ -20,3 +20,18 @@ createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+// Register PWA Service Worker for desktop app installation
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/sw.js')
+      .then((reg) => {
+        // Trigger background update checks
+        reg.update().catch(() => {})
+      })
+      .catch((err) => {
+        console.warn('Service worker registration failed:', err)
+      })
+  })
+}
