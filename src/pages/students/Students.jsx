@@ -31,6 +31,7 @@ import { StudentAddModal } from './StudentAddModal'
 import { PersonAvatar } from '@/components/ui/PersonAvatar'
 import { Printer } from 'lucide-react'
 import { STUDENT_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
+import { peek, revalidate } from '@/lib/queryClient'
 
 const GENDER_LABEL = { male: 'Male', female: 'Female', other: 'Other' }
 const TEACHER_PREF_LABEL = { male: 'Male teacher', female: 'Female teacher', any: 'Any' }
@@ -95,11 +96,16 @@ export default function Students() {
 
   useEffect(() => {
     let isMounted = true
-    fetchStudents({
+    const params = {
       page: 1,
       limit: 100,
       sort: sortConfig.direction === 'desc' ? `-${sortConfig.key}` : sortConfig.key,
-    })
+    }
+    const cacheKey = ['students', params]
+    const cached = peek(cacheKey)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (cached?.docs) setStudentsList(cached.docs) // instant paint, refreshed below
+    revalidate(cacheKey, () => fetchStudents(params))
       .then((res) => {
         if (isMounted && res?.docs) {
           setStudentsList(res.docs)

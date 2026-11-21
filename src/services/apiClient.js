@@ -2,6 +2,8 @@
  * Wellfind Academic — Central API Client & Authentication Management
  */
 
+import { clearCache, invalidateAll } from '../lib/queryClient';
+
 const configuredBaseUrl = (
   (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL) || ''
 ).replace(/\/+$/, '');
@@ -62,6 +64,7 @@ export function clearAuthSession() {
   } catch {
     // ignore
   }
+  clearCache(); // never show one session's cached data to the next login
 }
 
 export function isAuthenticated() {
@@ -88,6 +91,9 @@ export async function apiRequest(endpoint, options = {}) {
   if (options.body && !(options.body instanceof FormData) && !headers['Content-Type']) {
     headers['Content-Type'] = 'application/json';
   }
+
+  const method = (options.method || 'GET').toUpperCase();
+  const isAuthEndpoint = /\/api\/auth\/(login|logout)\b/.test(url);
 
   let response;
   try {
@@ -136,6 +142,11 @@ export async function apiRequest(endpoint, options = {}) {
     }
 
     throw error;
+  }
+
+  // A successful write makes every cached read potentially stale: refresh them so the UI reflects it.
+  if (method !== 'GET' && !isAuthEndpoint) {
+    invalidateAll();
   }
 
   // 204 No Content

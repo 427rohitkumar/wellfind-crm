@@ -20,6 +20,7 @@ import {
   ACCOUNT_CONFIG
 } from './teachersSampleData'
 import { getAuthUser } from '@/services/apiClient'
+import { peek, revalidate } from '@/lib/queryClient'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui'
 
 export default function TeacherDetail() {
@@ -50,28 +51,39 @@ export default function TeacherDetail() {
   const [downloadingDoc, setDownloadingDoc] = useState(null)
 
   const loadTeacher = useCallback(async () => {
-    setLoading(true)
+    const cacheKey = ['teacher-detail', id]
+    const hasCache = peek(cacheKey) !== undefined
+    if (!hasCache) setLoading(true) // revisit: paint from cache below, refresh quietly
     setError(null)
     try {
-      const data = await getTeacherById(id)
-      if (!data) {
-        setError(`Teacher with ID "${id}" could not be found.`)
+            const apply = (data) => {
+        if (!data) {
+          setError(`Teacher with ID "${id}" could not be found.`)
+        } else {
+          setTeacher(data)
+          setFormData({
+            name: data.name || '',
+            email: data.email || '',
+            mobile: data.mobile || '',
+            primarySubject: data.primarySubject || '',
+            qualification: data.qualification || '',
+            experienceYears: data.experienceYears || 0,
+            classLevels: data.classLevels || '',
+            locality: data.locality || '',
+            availability: data.availability || '',
+            allocationStatus: data.studentAllocation?.status || 'unallocated',
+            accountStatus: data.account?.status || 'active',
+            adminNotes: data.kyc?.reviewNotes || data.applicantNotes || '',
+          })
+        }
+        }
+      const cached = peek(cacheKey)
+      if (cached !== undefined) {
+        apply(cached)
+        setLoading(false)
+        revalidate(cacheKey, async () => (await getTeacherById(id)) ?? null).then((fresh) => { if (JSON.stringify(fresh) !== JSON.stringify(cached)) apply(fresh) }).catch(() => {})
       } else {
-        setTeacher(data)
-        setFormData({
-          name: data.name || '',
-          email: data.email || '',
-          mobile: data.mobile || '',
-          primarySubject: data.primarySubject || '',
-          qualification: data.qualification || '',
-          experienceYears: data.experienceYears || 0,
-          classLevels: data.classLevels || '',
-          locality: data.locality || '',
-          availability: data.availability || '',
-          allocationStatus: data.studentAllocation?.status || 'unallocated',
-          accountStatus: data.account?.status || 'active',
-          adminNotes: data.kyc?.reviewNotes || data.applicantNotes || '',
-        })
+        apply(await revalidate(cacheKey, async () => (await getTeacherById(id)) ?? null))
       }
     } catch (err) {
       setError(err.message || 'Failed to load teacher profile details.')

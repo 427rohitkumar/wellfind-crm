@@ -1,47 +1,49 @@
+import { lazy, Suspense } from 'react'
 import { Routes, Route, Navigate, useParams } from 'react-router-dom'
+import { PageLoader } from './components/ui/Loaders'
 import { Layout, ErrorLayout } from './components/layout/Layout'
 import { ProtectedRoute } from './components/auth/ProtectedRoute'
 import { RequireModule } from './components/auth/RequireModule'
 import { ADMIN_ROLES } from './services/roles'
 
 // Main app pages
-import Dashboard from './pages/dashboard/Dashboard'
-import WebsiteAnalytics from './pages/dashboard/WebsiteAnalytics'
-import Inquiries from './pages/inquiries/Inquiries'
-import StudentEnquiryDetail from './pages/inquiries/StudentEnquiryDetail'
-import TeacherEnquiryDetail from './pages/inquiries/TeacherEnquiryDetail'
-import Students from './pages/students/Students'
-import StudentDetail from './pages/students/StudentDetail'
-import Teachers from './pages/teachers/Teachers'
-import TeacherDetail from './pages/teachers/TeacherDetail'
-import Tests from './pages/tests/Tests'
-import TestDetail from './pages/tests/TestDetail'
-import Allocation from './pages/allocation/Allocation'
-import Allocations from './pages/admin/Allocations'
-import Users from './pages/admin/Users'
-import Mail from './pages/admin/Mail'
-import StudentPayments from './pages/payouts/StudentPayments'
-import TeacherPayments from './pages/payouts/TeacherPayments'
-import PayoutReports from './pages/payouts/PayoutReports'
-import Profile from './pages/profile/Profile'
+const Dashboard = lazy(() => import('./pages/dashboard/Dashboard'))
+const WebsiteAnalytics = lazy(() => import('./pages/dashboard/WebsiteAnalytics'))
+const Inquiries = lazy(() => import('./pages/inquiries/Inquiries'))
+const StudentEnquiryDetail = lazy(() => import('./pages/inquiries/StudentEnquiryDetail'))
+const TeacherEnquiryDetail = lazy(() => import('./pages/inquiries/TeacherEnquiryDetail'))
+const Students = lazy(() => import('./pages/students/Students'))
+const StudentDetail = lazy(() => import('./pages/students/StudentDetail'))
+const Teachers = lazy(() => import('./pages/teachers/Teachers'))
+const TeacherDetail = lazy(() => import('./pages/teachers/TeacherDetail'))
+const Tests = lazy(() => import('./pages/tests/Tests'))
+const TestDetail = lazy(() => import('./pages/tests/TestDetail'))
+const Allocation = lazy(() => import('./pages/allocation/Allocation'))
+const Allocations = lazy(() => import('./pages/admin/Allocations'))
+const Users = lazy(() => import('./pages/admin/Users'))
+const Mail = lazy(() => import('./pages/admin/Mail'))
+const StudentPayments = lazy(() => import('./pages/payouts/StudentPayments'))
+const TeacherPayments = lazy(() => import('./pages/payouts/TeacherPayments'))
+const PayoutReports = lazy(() => import('./pages/payouts/PayoutReports'))
+const Profile = lazy(() => import('./pages/profile/Profile'))
 
 // Teacher pages
-import TeacherDashboard from './pages/teacher/TeacherDashboard'
-import TeacherApplication from './pages/teacher/TeacherApplication'
-import TeacherStudents from './pages/teacher/TeacherStudents'
-import TeacherStudentDetail from './pages/teacher/TeacherStudentDetail'
-import TeacherFees from './pages/teacher/TeacherFees'
-import TeacherHistory from './pages/teacher/TeacherHistory'
-import TeacherProfile from './pages/teacher/TeacherProfile'
+const TeacherDashboard = lazy(() => import('./pages/teacher/TeacherDashboard'))
+const TeacherApplication = lazy(() => import('./pages/teacher/TeacherApplication'))
+const TeacherStudents = lazy(() => import('./pages/teacher/TeacherStudents'))
+const TeacherStudentDetail = lazy(() => import('./pages/teacher/TeacherStudentDetail'))
+const TeacherFees = lazy(() => import('./pages/teacher/TeacherFees'))
+const TeacherHistory = lazy(() => import('./pages/teacher/TeacherHistory'))
+const TeacherProfile = lazy(() => import('./pages/teacher/TeacherProfile'))
 
 // Auth pages
 import Login from './pages/auth/Login'
-import ForgotPassword from './pages/auth/ForgotPassword'
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'))
 
 // Error pages
-import Error403 from './pages/errors/Error403'
-import Error404 from './pages/errors/Error404'
-import Error500 from './pages/errors/Error500'
+const Error403 = lazy(() => import('./pages/errors/Error403'))
+const Error404 = lazy(() => import('./pages/errors/Error404'))
+const Error500 = lazy(() => import('./pages/errors/Error500'))
 
 /** Redirect that keeps the :id of the old URL. */
 function Redirect({ to }) {
@@ -53,6 +55,7 @@ const G = (module, el, level = 'read') => <RequireModule module={module} level={
 
 function App() {
   return (
+    <Suspense fallback={<PageLoader label="Loading…" />}>
     <Routes>
       {/* Default login route */}
       <Route path="/" element={<Login />} />
@@ -130,6 +133,7 @@ function App() {
       {/* Redirect unknown routes to 404 */}
       <Route path="*" element={<Navigate to="/404" replace />} />
     </Routes>
+    </Suspense>
   )
 }
 

@@ -11,6 +11,7 @@ import { getStudentById, updateStudent } from '@/services/studentService'
 import { StudentStatusBadge } from './StudentStatusBadge'
 import { STUDENT_STATUS_CONFIG, CLASS_OPTIONS, LOCALITY_OPTIONS } from './studentsSampleData'
 import { getAuthUser } from '@/services/apiClient'
+import { peek, revalidate } from '@/lib/queryClient'
 
 export default function StudentDetail() {
   const { id } = useParams()
@@ -29,30 +30,41 @@ export default function StudentDetail() {
   const [saveError, setSaveError] = useState('')
 
   const loadStudent = useCallback(async () => {
-    setLoading(true)
+    const cacheKey = ['student-detail', id]
+    const hasCache = peek(cacheKey) !== undefined
+    if (!hasCache) setLoading(true) // revisit: paint from cache below, refresh quietly
     setError(null)
     try {
-      const data = await getStudentById(id)
-      if (!data) {
-        setError(`Student with ID "${id}" could not be found.`)
+            const apply = (data) => {
+        if (!data) {
+          setError(`Student with ID "${id}" could not be found.`)
+        } else {
+          setStudent(data)
+          setFormData({
+            name: data.name || '',
+            parentName: data.parentName || '',
+            email: data.email || '',
+            phone: data.phone || '',
+            studentClass: data.studentClass || '',
+            subjectsText: Array.isArray(data.subjects) ? data.subjects.join(', ') : (data.subjects || ''),
+            locality: data.locality || '',
+            preferredTiming: data.preferredTiming || '',
+            budgetRange: data.budgetRange || '',
+            status: data.status || 'active',
+            assignedTeacher: data.assignedTeacher || '',
+            schoolName: data.schoolName || '',
+            sessionsPerWeek: data.sessionsPerWeek || 2,
+            adminNotes: data.adminNotes || '',
+          })
+        }
+        }
+      const cached = peek(cacheKey)
+      if (cached !== undefined) {
+        apply(cached)
+        setLoading(false)
+        revalidate(cacheKey, async () => (await getStudentById(id)) ?? null).then((fresh) => { if (JSON.stringify(fresh) !== JSON.stringify(cached)) apply(fresh) }).catch(() => {})
       } else {
-        setStudent(data)
-        setFormData({
-          name: data.name || '',
-          parentName: data.parentName || '',
-          email: data.email || '',
-          phone: data.phone || '',
-          studentClass: data.studentClass || '',
-          subjectsText: Array.isArray(data.subjects) ? data.subjects.join(', ') : (data.subjects || ''),
-          locality: data.locality || '',
-          preferredTiming: data.preferredTiming || '',
-          budgetRange: data.budgetRange || '',
-          status: data.status || 'active',
-          assignedTeacher: data.assignedTeacher || '',
-          schoolName: data.schoolName || '',
-          sessionsPerWeek: data.sessionsPerWeek || 2,
-          adminNotes: data.adminNotes || '',
-        })
+        apply(await revalidate(cacheKey, async () => (await getStudentById(id)) ?? null))
       }
     } catch (err) {
       setError(err.message || 'Failed to load student details.')

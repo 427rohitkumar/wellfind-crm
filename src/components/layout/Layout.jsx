@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { Outlet, Link } from 'react-router-dom';
+import { PageLoader } from '../ui/Loaders';
 import { Sidebar } from './Sidebar';
 import { Navbar } from './Navbar';
 import { useAppShell } from '../../context/AppShellContext';
@@ -33,7 +35,9 @@ export function Layout() {
           <Navbar />
           <div className="page content">
             <div className="content__container">
-              <Outlet />
+              <Suspense fallback={<PageLoader label="Loading…" />}>
+                <Outlet />
+              </Suspense>
             </div>
           </div>
         </main>

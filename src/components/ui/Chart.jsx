@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react'
-import ApexCharts from 'apexcharts'
 
 export function Chart({
   options,
@@ -38,10 +37,15 @@ export function Chart({
       },
     };
 
-    containerRef.current.innerHTML = '';
-    const chart = new ApexCharts(containerRef.current, finalOptions);
-    chartInstance.current = chart;
-    chart.render();
+    let cancelled = false;
+    // apexcharts is ~900KB: load it only when a chart is actually rendered, not with every page.
+    import('apexcharts').then(({ default: ApexCharts }) => {
+      if (cancelled || !containerRef.current) return;
+      containerRef.current.innerHTML = '';
+      const chart = new ApexCharts(containerRef.current, finalOptions);
+      chartInstance.current = chart;
+      chart.render();
+    });
 
     const handleThemeChange = (e) => {
       const nextTheme = e.detail?.theme || (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
@@ -57,6 +61,7 @@ export function Chart({
     window.addEventListener('stisla:themechange', handleThemeChange);
 
     return () => {
+      cancelled = true;
       window.removeEventListener('stisla:themechange', handleThemeChange);
       if (chartInstance.current) {
         chartInstance.current.destroy();

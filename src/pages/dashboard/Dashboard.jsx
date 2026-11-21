@@ -9,6 +9,7 @@ import { fetchStudents } from '../../services/studentService'
 import { fetchTeachers } from '../../services/teacherService'
 import { fetchStudentEnquiries } from '../../services/studentEnquiryService'
 import { useAuth } from '../../hooks/useAuth'
+import { peek, revalidate } from '../../lib/queryClient'
 
 const classCategories = ['Nursery', 'LKG', 'UKG', ...Array.from({ length: 10 }, (_, index) => `Class ${index + 1}`)]
 const boardCategories = ['CBSE', 'ICSE', 'BSEB (Bihar Board)', 'Other', 'Not Specified']
@@ -93,13 +94,25 @@ export default function Dashboard() {
   const { can } = usePermissions()
   const loadDashboard = useCallback(async (refresh = false) => {
     setError('')
-    if (refresh) setRefreshing(true)
+    const sKey = ['dash-students']
+    const tKey = ['dash-teachers']
+    const eKey = ['dash-enquiries']
+    const cS = peek(sKey), cT = peek(tKey), cE = peek(eKey)
+    const hasCache = !refresh && (cS || cT || cE)
+    if (hasCache) {
+      // Instant paint from cache; the fresh data replaces it below without a blocking loader.
+      setStudents(cS?.docs || [])
+      setTeachers(cT?.docs || [])
+      setEnquiries(cE?.docs || [])
+      setSources({ students: Boolean(cS?.isRealApi), teachers: Boolean(cT?.isRealApi), enquiries: Array.isArray(cE?.docs) })
+      setLoading(false)
+    } else if (refresh) setRefreshing(true)
     else setLoading(true)
     try {
       const [studentResult, teacherResult, enquiryResult] = await Promise.all([
-        can('students') ? fetchStudents({ page: 1, limit: 100, status: 'active' }) : Promise.resolve(null),
-        can('teachers') ? fetchTeachers({ page: 1, limit: 100 }) : Promise.resolve(null),
-        can('student_inquiries') ? fetchStudentEnquiries({ page: 1, limit: 100, sort: '-createdAt' }) : Promise.resolve(null),
+        can('students') ? revalidate(sKey, () => fetchStudents({ page: 1, limit: 100, status: 'active' })) : Promise.resolve(null),
+        can('teachers') ? revalidate(tKey, () => fetchTeachers({ page: 1, limit: 100 })) : Promise.resolve(null),
+        can('student_inquiries') ? revalidate(eKey, () => fetchStudentEnquiries({ page: 1, limit: 100, sort: '-createdAt' })) : Promise.resolve(null),
       ])
       setStudents(studentResult?.docs || [])
       setTeachers(teacherResult?.docs || [])

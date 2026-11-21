@@ -34,6 +34,7 @@ import {
 import { useEnquiryCounts } from '@/context/EnquiryCountContext'
 import { STUDENT_ENQUIRY_COLUMNS, TEACHER_ENQUIRY_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
 import { usePermissions } from '@/hooks/usePermissions'
+import { peek, revalidate } from '@/lib/queryClient'
 
 export default function Inquiries() {
   const { can } = usePermissions()
@@ -127,23 +128,34 @@ export default function Inquiries() {
       if (ignore) return
 
       if (activeTab === 'student') {
-        setStudentLoading(true)
-        setStudentError(null)
-        setStudentAuthError(false)
-
         const sortParam =
           studentSortConfig.direction === 'desc'
             ? `-${studentSortConfig.key}`
             : studentSortConfig.key
+        const params = {
+          page: studentPage,
+          limit: 10,
+          sort: sortParam,
+          status: studentStatusFilter,
+          search: studentSearchQuery,
+        }
+        const cacheKey = ['student-enquiries', params]
+
+        // Cache-first: paint the last known rows instantly, then refresh quietly in the background.
+        const cached = peek(cacheKey)
+        if (cached) {
+          const docs = cached.docs || []
+          setStudentInquiries(docs)
+          setStudentTotalDocs(cached.totalDocs ?? docs.length)
+          setStudentTotalPages(cached.totalPages ?? 1)
+        } else {
+          setStudentLoading(true)
+        }
+        setStudentError(null)
+        setStudentAuthError(false)
 
         try {
-          const res = await fetchStudentEnquiries({
-            page: studentPage,
-            limit: 10,
-            sort: sortParam,
-            status: studentStatusFilter,
-            search: studentSearchQuery,
-          })
+          const res = await revalidate(cacheKey, () => fetchStudentEnquiries(params))
 
           if (!ignore) {
             const docs = res?.docs || []
@@ -176,23 +188,33 @@ export default function Inquiries() {
           }
         }
       } else {
-        setTeacherLoading(true)
-        setTeacherError(null)
-        setTeacherAuthError(false)
-
         const sortParam =
           teacherSortConfig.direction === 'desc'
             ? `-${teacherSortConfig.key}`
             : teacherSortConfig.key
+        const params = {
+          page: teacherPage,
+          limit: 10,
+          sort: sortParam,
+          status: teacherStatusFilter,
+          search: teacherSearchQuery,
+        }
+        const cacheKey = ['teacher-enquiries', params]
+
+        const cached = peek(cacheKey)
+        if (cached) {
+          const docs = cached.docs || []
+          setTeacherInquiries(docs)
+          setTeacherTotalDocs(cached.totalDocs ?? docs.length)
+          setTeacherTotalPages(cached.totalPages ?? 1)
+        } else {
+          setTeacherLoading(true)
+        }
+        setTeacherError(null)
+        setTeacherAuthError(false)
 
         try {
-          const res = await fetchTeacherEnquiries({
-            page: teacherPage,
-            limit: 10,
-            sort: sortParam,
-            status: teacherStatusFilter,
-            search: teacherSearchQuery,
-          })
+          const res = await revalidate(cacheKey, () => fetchTeacherEnquiries(params))
 
           if (!ignore) {
             const docs = res?.docs || []

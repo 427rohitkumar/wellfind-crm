@@ -34,6 +34,7 @@ import { TeacherDetailModal } from './TeacherDetailModal'
 import { TeacherEditModal } from './TeacherEditModal'
 import { Printer } from 'lucide-react'
 import { TEACHER_COLUMNS, downloadCSV, fetchAllPages, printRows, today } from '@/utils/exportData'
+import { peek, revalidate } from '@/lib/queryClient'
 
 function getFeeDisplay(fee) {
   const status = fee?.status || 'pending'
@@ -112,9 +113,12 @@ export default function Teachers() {
 
   // Load teachers from backend API
   const loadTeachers = useCallback(async (showNotification = false) => {
-    setLoading(true)
+    const cacheKey = ['teachers', 'list']
+    const cached = showNotification ? undefined : peek(cacheKey)
+    if (cached?.docs) setTeachers(cached.docs) // instant paint, refreshed below
+    else setLoading(true)
     try {
-      const res = await fetchTeachers()
+      const res = await revalidate(cacheKey, () => fetchTeachers())
       if (res?.docs) {
         setTeachers(res.docs)
         if (showNotification) {
